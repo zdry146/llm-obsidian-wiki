@@ -1,0 +1,221 @@
+{
+  "main": {
+    "id": "be96d3fee552ae1c",
+    "type": "split",
+    "children": [
+      {
+        "id": "aa2c3f7ab16aecae",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3261c691251ef05d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "concepts/jcl-spooling-sysout.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "jcl-spooling-sysout"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "2ab8d2cb275a4d10",
+    "type": "split",
+    "children": [
+      {
+        "id": "cb365a015da2f4f2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "eea61847c668c6ae",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "c58fcb1507679ccd",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "5603835cf10a9d60",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 278.5
+  },
+  "right": {
+    "id": "df567f94e04f3dde",
+    "type": "split",
+    "children": [
+      {
+        "id": "9c490f131cba43e9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "a4c564222dc6ce88",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "db2.pdf",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "db2 的反向链接列表"
+            }
+          },
+          {
+            "id": "2e748921c3d6c617",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "db2.pdf",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "db2 的出链列表"
+            }
+          },
+          {
+            "id": "7644d4f911eef920",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "50d0224ab8d65134",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "添加笔记属性"
+            }
+          },
+          {
+            "id": "92edc6f9555b4acf",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "db2.pdf",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "db2 的大纲"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false
+    }
+  },
+  "active": "3261c691251ef05d",
+  "lastOpenFiles": [
+    "concepts/db2-12-security.md",
+    "concepts/websphere-mq-configuration.md",
+    "concepts/websphere-mq-integration.md",
+    "concepts/websphere-mq-programming.md",
+    "concepts/websphere-mq-messages.md",
+    "concepts/websphere-mq-core-concepts.md",
+    "concepts/websphere-mq-objects.md",
+    "concepts/messaging-middleware.md",
+    "references/websphere-mq-primer.md",
+    "ibm mq.pdf",
+    "concepts/jcl-sdsf-output.md",
+    "concepts/jcl-utilities.md",
+    "concepts/jcl-storage-resources.md",
+    "concepts/jcl-procedures-instream.md",
+    "concepts/jcl-restart-checkpoint.md",
+    "concepts/jcl-scheduling-timing.md",
+    "concepts/jcl-spooling-sysout.md",
+    "concepts/jcl-conditional-execution.md",
+    "concepts/jcl-data-set-disposition.md",
+    "concepts/jcl-introduction.md",
+    "concepts/jcl-job-proc-step.md",
+    "references/zos-jcl-user-guide.md",
+    "jcl user guide.pdf",
+    "concepts/zos-data-sets.md",
+    "concepts/zos-jcl-basics.md",
+    "concepts/zos-batch-processing.md",
+    "concepts/mainframe-roles-workloads.md",
+    "concepts/zos-application-development.md",
+    "zOS Basics.pdf",
+    "CICS.pdf",
+    "synthesis",
+    "db2.pdf"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "stats": {
+    "total_sources_ingested": 5,
+    "total_pages": 57
+  },
+  "sources": [
+    {
+      "ingested_at": "2026-05-14T06:44:00Z",
+      "size_bytes": 6060373,
+      "modified_at": "2026-05-13T23:35:00Z",
+      "content_hash": "sha256:9e3a0767212f95afda68050506ceb88bfb977d96cd479c2fc53d11374b629997",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "references/ibm-db2-12-zos-technical-overview.md",
+        "concepts/continuous-delivery.md",
+        "concepts/db2-12-performance-enhancements.md",
+        "concepts/db2-12-sql-enhancements.md",
+        "concepts/db2-12-scalability-availability.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-05-14T03:55:00Z",
+      "size_bytes": 6060373,
+      "modified_at": "2026-05-13T23:35:00Z",
+      "content_hash": "sha256:9e3a0767212f95afda68050506ceb88bfb977d96cd479c2fc53d11374b629997",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "concepts/db2-12-temporal-tables.md",
+        "concepts/db2-12-data-sharing.md",
+        "concepts/db2-12-administrator.md",
+        "concepts/db2-12-utilities.md",
+        "concepts/db2-12-security.md",
+        "concepts/db2-12-installation-migration.md",
+        "concepts/db2-12-connectivity.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-05-14T08:00:00Z",
+      "size_bytes": 6060373,
+      "modified_at": "2026-05-13T23:35:00Z",
+      "content_hash": "sha256:9e3a0767212f95afda68050506ceb88bfb977d96cd479c2fc53d11374b629997",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "synthesis/db2-12-architecture-design.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-05-14T15:31:00Z",
+      "size_bytes": 12780286,
+      "modified_at": "2026-01-15T02:18:34Z",
+      "content_hash": "sha256:daa35d61a5d84e58daa7e1d35f3f06a6d06875aa69eee3c3a8646515f28fdea9",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "references/modernizing-applications-ibm-cics.md",
+        "concepts/cics-overview.md",
+        "concepts/cics-hello-world-cobol.md",
+        "concepts/cics-application-development.md",
+        "concepts/cics-exec-api.md",
+        "concepts/cics-programming-cobol.md",
+        "concepts/cics-channels-containers.md",
+        "concepts/cics-java-modernization.md",
+        "concepts/cics-async-event-processing.md",
+        "concepts/cics-devops.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-05-15T01:21:00Z",
+      "size_bytes": 6307121,
+      "modified_at": "2026-05-15T01:19:00Z",
+      "content_hash": "sha256:150e4d6ace8bb1dba604d741944ef1a1ef4719fba00a8486a9bdec48398c4f58",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "references/introduction-to-new-mainframe-zos-basics.md",
+        "concepts/mainframe-history-s360.md",
+        "concepts/mainframe-hardware-architecture.md",
+        "concepts/mainframe-high-availability-sysplex.md",
+        "concepts/zos-overview.md",
+        "concepts/zos-workload-management.md",
+        "concepts/zos-io-data-management.md",
+        "concepts/zos-tso-e-ispf-unix.md",
+        "concepts/zos-data-sets.md",
+        "concepts/zos-jcl-basics.md",
+        "concepts/zos-batch-processing.md",
+        "concepts/zos-programming-languages.md",
+        "concepts/zos-application-development.md",
+        "concepts/mainframe-roles-workloads.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-05-15T01:45:00Z",
+      "size_bytes": 1417366,
+      "modified_at": "2026-05-15T01:41:00Z",
+      "content_hash": "sha256:d2ecaca5530b08ed84053a268d411438401d8c74fe63c87decc9a56c18ad09b7",
+      "source_type": "document",
+      "project": null,
+      "pages_created": [
+        "references/websphere-mq-primer.md",
+        "concepts/messaging-middleware.md",
+        "concepts/websphere-mq-core-concepts.md",
+        "concepts/websphere-mq-objects.md",
+        "concepts/websphere-mq-messages.md",
+        "concepts/websphere-mq-programming.md",
+        "concepts/websphere-mq-configuration.md",
+        "concepts/websphere-mq-integration.md"
+      ],
+      "pages_updated": []
+    }
+  ]
+}
