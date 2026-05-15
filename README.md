@@ -22,6 +22,7 @@
 | **CICS** | 事务处理、COBOL 编程、EXEC API、Channels/Containers、Java 现代化 |
 | **DB2 12 for z/OS** | 数据库管理、性能优化、高可用、SQL 增强、时间表 |
 | **IBM MQ / WebSphere MQ** | 消息中间件、MQI 编程、发布/订阅、队列管理、与 CICS/z/OS 集成 |
+| **TWS (Tivoli Workload Scheduler)** | z/OS 工作负载调度、端到端调度、作业自动化、与 distributed 节点集成 |
 
 ## 资料来源
 
@@ -38,3 +39,4 @@
 ## 最近更新
 
 - 2026-05: 完善 MQ/MOM 知识体系、CICS 应用现代化、z/OS Batch 处理
+- 2026-05: 新增 TWS（IBM Tivoli Workload Scheduler）最佳实践（SG24-7156-01）
