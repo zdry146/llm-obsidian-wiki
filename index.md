@@ -38,7 +38,6 @@
 
 ## Framework Analyses
 
-- [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
 
 ## Concepts
 - [[mainframe-history-s360]] — IBM System/360历史和mainframe架构演进：S/360→S/370→ESA/390→z/Architecture（ #ibm #mainframe #history)
@@ -68,7 +67,6 @@
 
 ## Framework Analyses
 
-- [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
 
 ## Concepts
 - [[messaging-middleware]] — 消息导向中间件（MOM）基础：异步消息传递、解耦、点对点和发布/订阅模式、典型业务场景（零售/银行/机场）（ #messaging #middleware #mom)
