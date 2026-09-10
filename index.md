@@ -1,5 +1,9 @@
 # Wiki Index
 
+## Framework Analyses
+
+- [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
+
 ## Concepts
 - [[continuous-delivery]] — DB2 12连续交付与函数级别管理（ #db2 #zos)
 - [[db2-12-performance-enhancements]] — DB2 12性能增强特性：1100万次/秒插入、FTB索引优化（ #db2 #performance)
@@ -32,6 +36,10 @@
 - [[zos-jcl-user-guide]] — IBM z/OS 3.1 MVS JCL User's Guide (SA23-1386-60)，官方JCL用户指南（ #ibm #zos #jcl #redbook)
 - [[websphere-mq-primer]] — IBM Redbooks REDP-0021-01，WebSphere MQ入门：MOM概念、MQ核心对象、编程接口和配置实践（ #ibm #websphere #messaging #redbook)
 
+## Framework Analyses
+
+- [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
+
 ## Concepts
 - [[mainframe-history-s360]] — IBM System/360历史和mainframe架构演进：S/360→S/370→ESA/390→z/Architecture（ #ibm #mainframe #history)
 - [[mainframe-hardware-architecture]] — mainframe硬件架构：CPC、LPAR、CHPID、处理器类型（CP/IFL/zAAP/zIIP）、DASD（ #ibm #mainframe #hardware)
@@ -57,6 +65,10 @@
 - [[jcl-storage-resources]] — 存储资源控制：REGION/ADDRSPC存储请求、程序库（STEPLIB/JOBLIB）、WLM调度环境（ #ibm #zos #jcl)
 - [[jcl-utilities]] — IBM实用程序概述：IEBGENER、IEBCOPY、SORT/DFSORT、IEBCOMPR等数据处理工具（ #ibm #zos #utilities)
 - [[jcl-sdsf-output]] — SDSF查看和管理作业输出：DA/I/O/ST/H面板、数据集类型解读、条件码分析（ #ibm #zos #jcl #sdsf)
+
+## Framework Analyses
+
+- [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
 
 ## Concepts
 - [[messaging-middleware]] — 消息导向中间件（MOM）基础：异步消息传递、解耦、点对点和发布/订阅模式、典型业务场景（零售/银行/机场）（ #messaging #middleware #mom)
