@@ -4,6 +4,7 @@
 
 - [[mu-server-netty-analysis/summary]] - mu-server 框架在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #framework #opencode #omo）
 - [[mu-server-2.2.9-analysis/summary]] - mu-server 2.2.9 在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #2.2.9 #opencode #omo）
+- [[mu-server-2.4.2-analysis/summary]] - mu-server 2.4.2 在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #2.4.2 #opencode #omo）
 
 ## Concepts
 - [[continuous-delivery]] — DB2 12连续交付与函数级别管理（ #db2 #zos)
