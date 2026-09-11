@@ -33,6 +33,12 @@ updated: 2026-09-12
 
 ### 1.1 6 层架构图
 
+![mu-server 2.4.2 架构图](01-architecture-overview.png)
+
+*渲染版（mermaid.ink 生成，1904×875）：点击 [raw.githubusercontent.com](https://raw.githubusercontent.com/zdry146/llm-obsidian-wiki/master/synthesis/mu-server-2.4.2-analysis/01-architecture-overview.png) 直接看 PNG，或点 [GitHub 渲染](https://github.com/zdry146/llm-obsidian-wiki/blob/master/synthesis/mu-server-2.4.2-analysis/01-architecture-overview.png) 看 SVG。*
+
+**Mermaid 源码**（Obsidian 渲染版，GitHub mermaid v9 不支持 dotted edge label，源码用 `-.->` 无 label 形式）：
+
 ```mermaid
 graph TB
     subgraph L0["L0 · Netty 原生 (io.netty.*)"]
@@ -85,28 +91,28 @@ graph TB
         T1["Netty event loop<br/>16 NIO threads"]
         T2["muhandler 独立 Executor<br/>ThreadPoolExecutor(8, 400, 60s)"]
         T3["HttpExchange.block()<br/>跨线程同步"]
-        T1 -.executor.execute.-> T2
-        T2 -.ctx.executor().submit.-> T3
-        T3 -.task.get().sync.-> T1
+        T1 -.-> T2
+        T2 -.-> T3
+        T3 -.-> T1
     end
 
     %% Netty → 协议
     NETTY --> H1C
     NETTY --> H2C
-    H2C -.uses.-> H2AUX
-    AL -.动态切换 pipeline.-> H1C
-    AL -.动态切换 pipeline.-> H2C
-    HP -.真实客户端 IP.-> EX
-    BP -.pipeline 背压.-> H1C
-    MFC -.fork 自 Netty 4.1.136+.-> H1C
+    H2C -.-> H2AUX
+    AL -.-> H1C
+    AL -.-> H2C
+    HP -.-> EX
+    BP -.-> H1C
+    MFC -.-> H1C
 
     %% 协议 → 抽象
     H1C --> EX
     H2C --> EX
     EX --> NREQ
     EX --> NRESP
-    NREQ -.implements.-> MR
-    NRESP -.implements.-> MRE
+    NREQ -.-> MR
+    NRESP -.-> MRE
 
     %% 抽象 → 分发
     EX --> NHA
