@@ -33,11 +33,7 @@ updated: 2026-09-12
 
 ### 1.1 6 层架构图
 
-![mu-server 2.4.2 架构图](01-architecture-overview.png)
-
-*渲染版（mermaid.ink 生成，1904×875）：点击 [raw.githubusercontent.com](https://raw.githubusercontent.com/zdry146/llm-obsidian-wiki/master/synthesis/mu-server-2.4.2-analysis/01-architecture-overview.png) 直接看 PNG，或点 [GitHub 渲染](https://github.com/zdry146/llm-obsidian-wiki/blob/master/synthesis/mu-server-2.4.2-analysis/01-architecture-overview.png) 看 SVG。*
-
-**Mermaid 源码**（Obsidian 渲染版，GitHub mermaid v9 不支持 dotted edge label，源码用 `-.->` 无 label 形式）：
+**Mermaid 源码**（GitHub mermaid v9 兼容，dotted edge 用 `-.->` 无 label 形式）：
 
 ```mermaid
 graph TB
