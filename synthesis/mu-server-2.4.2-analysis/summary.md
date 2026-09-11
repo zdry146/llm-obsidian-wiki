@@ -1,911 +1,900 @@
 ---
-title: "mu-server 2.4.2 在 Netty 之上新增/包装的能力 - 全量分析综合报告"
+title: "mu-server 2.4.2 源码分析 — Spark 直接版"
 category: synthesis
-tags: [java, netty, mu-server, framework, analysis, opencode, omo, synthesis, 2.4.2]
-sources: ["mu-server 2.4.2 @ tag mu-server-2.4.2 (https://github.com/3redronin/mu-server)", "omo Sisyphus agent team analysis (2026-09-11, 10 drafts + 1 final report)"]
-summary: "omo Sisyphus agent team 对 mu-server 2.4.2 (tag) 源码全量分析的综合报告: 6 层架构 (Netty → 协议 → 抽象 → 分发 → Handler/功能 → 应用), Netty 原生 vs mu-server 对照表, 6 个关键设计模式, 使用场景对比, 0.0.3-SNAPSHOT → 2.2.9 → 2.4.2 演进分析 (Java 11, Netty 4.1.135.Final, 248 文件 / 31840 行)"
+tags: [java, netty, mu-server, framework, direct-analysis, spark, 2.4.2]
+sources: ["mu-server 2.4.2 @ tag mu-server-2.4.2 (https://github.com/3redronin/mu-server)"]
+summary: "Spark 直接读 mu-server 2.4.2 源码 (248 Java 文件 / 31840 行) 的中文模块化分析报告：协议层 / 抽象层 / 分发层 / 路由 / JAX-RS / 功能特性 / 关键设计模式 / Netty 原生对照表 / 演化对比。"
 provenance:
-  extracted: 0.85
-  inferred: 0.10
+  extracted: 0.90
+  inferred: 0.05
   ambiguous: 0.05
-base_confidence: 0.82
+  base_confidence: 0.88
 lifecycle: draft
 lifecycle_changed: 2026-09-11
 created: 2026-09-11
 updated: 2026-09-11
 ---
 
-# mu-server 2.4.2 — Full Source Analysis
+# mu-server 2.4.2 源码分析 — Spark 直接版
 
-> **Scope:** Complete read of `src/main/java/` of `mu-server` at tag `mu-server-2.4.2`
-> (commit `ae09153` on detached HEAD).
->
-> **Repo:** `/tmp/mu-server-2.4.2/` — 248 Java files / 63,680 LOC
-> (main: 58,492; tests bring the rest).
-> **POM version:** `2.4-SNAPSHOT` (tag is `mu-server-2.4.2`).
-> **Primary dependency:** `io.netty:netty-*` 4.1.137.Final (4.2.17.Final configured as fallback).
->
-> **Drafts backing this report:** `.omo/drafts/01-protocol-layer.md` through `10-evolution-and-comparison.md` (~2,500 lines of detail).
+> **版本**: mu-server 2.4.2 @ tag (commit `086a921` "Update Netty version to 4.1.135.Final")
+> **依赖**: Netty 4.1.135.Final + jakarta.ws.rs 3.0
+> **JDK**: Java 11 (source/target)
+> **规模**: 248 Java 文件 / 31,840 行
+> **包结构**: `io.muserver` (核心) + `io.muserver.handlers` (内置 handler) + `io.muserver.rest` (JAX-RS)
+
+mu-server 是基于 Netty 的轻量级现代 Java Web 服务器。核心思路：**用 Netty 做传输层，在其上构建 Java Web 服务器"缺失的那一层抽象"** —— 从 Netty 的 `ByteBuf` / `ChannelHandlerContext` / `HttpRequest` 向上提供 `MuRequest` / `MuResponse` / fluent builder / JAX-RS / SSE 等 handler 友好的 API。
 
 ---
 
-## 1. 执行摘要 (Executive Summary)
+## 1. 整体架构：六层叠加
 
-**mu-server 定义**: A single-jar Java HTTP server library that wraps Netty
-4.1 with a deliberately small public API surface (`MuRequest`,
-`MuResponse`, `MuServer`, `HttpConnection`) while delivering a
-production-ready stack: HTTP/1.1 + HTTP/2 (ALPN), TLS with SNI-based
-multi-cert + live cert reload, HA Proxy protocol, JAX-RS 3.0
-(`jakarta.ws.rs`) implementation, automatic OpenAPI 3 schema +
-HTML documentation generation, rate limiting, modern CSRF defence
-(`Sec-Fetch-Site`), gzip, server-sent events (sync + async),
-WebSocket, static-file serving with HTTP Range, and Forwarded/X-Forwarded-*
-client-IP detection. The total `src/main/java/` is 248 files / 58,492
-LOC — roughly one-tenth the size of Jersey.
+| 层 | 包 / 类 | 角色 |
+|---|---|---|
+| **Netty 原生** | `io.netty.*` | channel / pipeline / event loop / codec |
+| **协议层** | `Http1Connection` / `Http2Connection` / `AlpnHandler` / `HAProxyMessageHandler` | 把 Netty 消息转成 mu 的 Request/Response |
+| **抽象层** | `NettyRequestAdapter` / `NettyResponseAdaptor` / `HttpExchange` / `MuRequest` / `MuResponse` | handler 看到的高层 API |
+| **分发层** | `MuServerBuilder` / `MuServerImpl` / `NettyHandlerAdapter` | builder、生命周期、handler 调度 |
+| **路由层** | `Routes` / `RouteHandler` / `UriPattern` | URI 模板路由 |
+| **Handler 库** | `handlers.CORSHandler` / `CSRFProtectionHandler` / `HttpsRedirector` / `ResourceHandler` | 开箱即用 |
+| **JAX-RS 层** | `rest.*` | jakarta.ws.rs 注解 + OpenAPI 生成 |
+| **应用层** | 用户写的 `MuHandler` / JAX-RS resource | 业务代码 |
 
-**核心差异 (0.0.3 → 2.2.9 → 2.4.2)**:
-- **0.0.3-SNAPSHOT** (258 files / 36,317 LOC): the initial public betas.
-  No OpenAPI, no JAX-RS, no rate limiter, no HAProxy, no HTTP/2.
-- **2.2.9** (240 files / 30,755 LOC): added JAX-RS, OpenAPI generation,
-  rate limiter, HAProxy protocol, HTTP/2 with ALPN, static-file Range
-  support.
-- **2.4.2** (248 files / ~58,500 LOC): added **CSRFProtectionHandler**
-  (modern, no-token CSRF defence on `Sec-Fetch-Site`), **`PreReader`**
-  (pre-read for HTTP/1 disconnect detection), **`MuFlowControlHandler`**
-  (local copy of Netty's `FlowControlHandler` because 4.1.136/4.2.15+
-  changed the upstream behaviour), **`BackPressureHandler`**, the
-  **`mu-` Content-Encoding prefix hack** for HTTP/2 response
-  compression (`MuGzipHttp2ConnectionEncoder` +
-  `MuCompressorHttp2ConnectionEncoder`), **`CollectionParameterStrategy`**
-  guard against the pre-0.70 collection parsing behaviour (build fails
-  if not explicitly set), **`MuServerImpl.changeHttpsConfig(...)`** for
-  live cert swap, **`SelectiveHttpContentCompressor`** (size + mime
-  type gate).
-
-The architectural shape (protocol → abstract → dispatcher → handler
-chain) has been stable since 0.0.3; the growth has been in the
-feature-bundles (`handlers/`, `rest/`, `openapi/`) and in hardening the
-pipeline (custom flow control, pre-reader, back-pressure).
+> **关键事实**：mu-server **不会从 Netty event loop 跑 user handler**（见 §8.1）。所有"用户逻辑"通过独立的 `ExecutorService` 调度，event loop 只负责拆装消息。这是跟裸 Netty 编程体验最大的区别。
 
 ---
 
-## 2. 架构总览 (Architecture Overview — 6 layers)
+## 2. 协议层 (Protocol Layer)
 
-```mermaid
-flowchart TB
-    subgraph L1["Layer 1 — JDK / OS I/O"]
-        JDK["java.nio.channels / Selector"]
-        OS["TCP / TLS sockets"]
-        JDK --> OS
-    end
-
-    subgraph L2["Layer 2 — Netty 4.1 (4.1.137.Final)"]
-        NIO["NioEventLoopGroup boss=1, worker=nioThreads"]
-        Idle["IdleStateHandler"]
-        Traffic["GlobalTrafficShapingHandler"]
-        HAPX["HAProxyMessageDecoder+Handler"]
-        SNI["MuSniHandler"]
-        ALPN["AlpnHandler (ApplicationProtocolNegotiationHandler)"]
-        NIO --> Idle --> Traffic --> HAPX --> SNI --> ALPN
-    end
-
-    subgraph L3["Layer 3 — mu-server Protocol (package-private)"]
-        H1["Http1Connection\n(SimpleChannelInboundHandler)"]
-        H2["Http2Connection\n(Http2ConnectionHandler + flow-control buffer)"]
-        EX["HttpExchange (state machine)"]
-        H1 --> EX
-        H2 --> EX
-    end
-
-    subgraph L4["Layer 4 — mu-server Abstract API (public)"]
-        MR["MuRequest (NettyRequestAdapter)"]
-        MResp["MuResponse (NettyResponseAdaptor + Http1Response / Http2Response)"]
-        HD["Headers (Http1Headers / Http2Headers)"]
-        Conn["HttpConnection"]
-        EX --> MR
-        EX --> MResp
-        H1 --> Conn
-        H2 --> Conn
-    end
-
-    subgraph L5["Layer 5 — Dispatcher"]
-        NHA["NettyHandlerAdapter\n(ExecutorService: cached thread pool 8-400)"]
-        Hdl["MuHandler / RouteHandler / Routes / ContextHandler / WebSocketHandler"]
-        AS["AsyncHandle / SsePublisher / AsyncSsePublisher"]
-        NHA --> Hdl
-        MR --> AS
-    end
-
-    subgraph L6["Layer 6 — Application Code (user)"]
-        HndL["handlers/: CORS / CSRF / ResourceHandler / HttpsRedirector"]
-        REST["rest/: RestHandler (JAX-RS 3.0)"]
-        OA["openapi/: OpenApiDocumentor"]
-        HndL --> NHA
-        REST --> NHA
-        OA --> REST
-    end
-
-    ALPN -->|HTTP/1.1| H1
-    ALPN -->|HTTP/2| H2
-    EX --> NHA
-```
-
-**Layer responsibilities:**
-
-| Layer | Responsibility | mu-server class |
-|---|---|---|
-| 1 | Socket I/O, selectors | JDK |
-| 2 | Netty pipeline, codecs, TLS, ALPN | Netty 4.1 |
-| 3 | HTTP message ↔ mu `HttpExchange` | `Http1Connection`, `Http2Connection`, `AlpnHandler`, `HAProxyMessageHandler`, `MuSniHandler`, `MuFlowControlHandler`, `BackPressureHandler`, `PreReader`, `SelectiveHttpContentCompressor` |
-| 4 | Public API + adapters | `MuRequest`, `MuResponse`, `HttpConnection`, `Headers`, `ForwardedHeader`, `Cookie`, `CookieBuilder` |
-| 5 | Dispatch, routing, async | `MuServer`, `MuServerImpl`, `MuServerBuilder`, `NettyHandlerAdapter`, `Routes`, `RouteHandler`, `MuHandler`, `ContextHandler`, `ContextHandlerBuilder`, `WebSocketHandler`, `WebSocketHandlerBuilder`, `AsyncHandle`, `SsePublisher`, `AsyncSsePublisher`, `MuStats` |
-| 6 | User-facing handler library | `io.muserver.handlers.*` (CORS, CSRF, Resource, HttpsRedirector), `io.muserver.rest.*` (JAX-RS), `io.muserver.openapi.*` |
-
-The **Netty pipeline is package-private** — application code never
-imports any `io.netty.*` class (unless it adds its own handler, which
-mu-server does support).
-
----
-
-## 3. Netty 原生 vs mu-server 对照表 (Comparison)
-
-### 3.1 Pipeline construction
-
-| Netty native | mu-server equivalent | File:line |
-|---|---|---|
-| `ServerBootstrap b = new ServerBootstrap();`<br>`b.group(boss, worker).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<SocketChannel>() { ... });` | `MuServerBuilder.httpsServer().start()` | `MuServerBuilder.java:749-789` |
-| `p.addLast("idle", new IdleStateHandler(...));` | same (called from `createChannel`) | `MuServerBuilder.java:760` |
-| `p.addLast(new HttpServerCodec());` | `p.addLast("decoder", new HttpRequestDecoder(maxUrl + 17, maxHeaders, 8192));` + custom `HttpResponseEncoder` subclass + `HttpServerKeepAliveHandler` | `MuServerBuilder.java:791-807` |
-| `p.addLast(new HttpContentCompressor());` | `p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));` (gated by `ServerSettings.shouldCompress`) | `SelectiveHttpContentCompressor.java:9-29` |
-| `p.addLast(new FlowControlHandler());` | `p.addLast("flowControl", new MuFlowControlHandler());` (local copy — see file comment for why) | `MuFlowControlHandler.java:29-36` |
-| Manual back-pressure (none built-in) | `p.addLast(BackPressureHandler.NAME, new BackPressureHandler());` — explicit queue + `channelWritabilityChanged` drain | `BackPressureHandler.java:30-72` |
-| `p.addLast(new HttpObjectAggregator(...));` | **Not used** — mu-server reads body chunks explicitly via `RequestBodyReader` | `RequestBodyReader.java:38-122` |
-| Manual `p.addLast(new MyHandler());` | `p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));` | `MuServerBuilder.java:806` |
-| ALPN for HTTP/2: `p.addLast(new ApplicationProtocolNegotiationHandler("h2") { configurePipeline(...) })` | `p.addLast("alpn", new AlpnHandler(nettyHandlerAdapter, server, proto));` | `AlpnHandler.java:7-46` |
-| HTTP/2 connection: `Http2ConnectionHandlerBuilder` | `new Http2ConnectionBuilder(server, nettyHandlerAdapter).build()` (via ALPN) | `Http2ConnectionBuilder.java:5-36` |
-| SNI / multi-cert: `SniHandler(...)` | `p.addLast("sni", new MuSniHandler(() -> new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()));` | `MuServerBuilder.java:767` |
-| `HAProxyMessageDecoder` + custom handler | `p.addLast("HAProxyMessageDecoder", new HAProxyMessageDecoder());` + `p.addLast("HAProxyMessageHandler", new HAProxyMessageHandler());` | `MuServerBuilder.java:762-765` |
-
-### 3.2 Request body reading
-
-| Netty native | mu-server equivalent | File:line |
-|---|---|---|
-| Accumulate `HttpContent` chunks yourself, handle back-pressure | `request.inputStream()` returns `InputStream` | `NettyRequestAdapter.java:133-157` |
-| Buffer to string yourself | `request.readBodyAsString()` | `NettyRequestAdapter.java:159-168` |
-| Parse multipart manually (HttpPostRequestDecoder) | `request.form()` (multipart detected by content-type) | `NettyRequestAdapter.java:239-242` |
-| Servlet-3 async read listener | `request.handleAsync().setReadListener(...)` | `NettyRequestAdapter.java:309-315`, `RequestBodyReader.ListenerAdapter` |
-| URL-decoded query string parsing | `request.query()` returns `RequestParameters` | `NettyRequestAdapter.java:57-59` |
-| `CookieDecoder` | `request.cookies()` / `request.cookie(name)` (uses Netty's `ServerCookieDecoder.STRICT`) | `NettyRequestAdapter.java:245-270` |
-
-### 3.3 Response writing
-
-| Netty native | mu-server equivalent | File:line |
-|---|---|---|
-| `ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, status, body, headers));` | `response.write(String text)` (sets Content-Length) | `NettyResponseAdaptor.java:318-337` |
-| Manual `HttpContent` chunks | `response.sendChunk(String text)` | `NettyResponseAdaptor.java:205-214` |
-| `OutputStream` over `ByteBuf` | `response.outputStream(int bufferSize)` returns buffered/unbuffered `OutputStream` | `NettyResponseAdaptor.java:239-253` |
-| `PrintWriter` wrapper | `response.writer()` | `NettyResponseAdaptor.java:261-271` |
-| `ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT)` | `response.complete()` (in dispatcher) | `NettyResponseAdaptor.java:288-315` |
-| Manual redirect | `response.redirect(String url)` / `response.redirect(URI uri)` | `NettyResponseAdaptor.java:222-224, 343-353` |
-| `encoder.writeHeaders(ctx, streamId, headers, ...)` (h2) | `Http2Response.writeHeaders(...)` (h2-specific subclass) | `Http2Response.java:53-71` |
-
-### 3.4 Server lifecycle
-
-| Netty native | mu-server equivalent | File:line |
-|---|---|---|
-| `ChannelFuture bind = b.bind(port); bind.sync();` | `MuServer server = MuServerBuilder.httpsServer().withHttpsPort(0).start();` | `MuServerBuilder.java:642-733` |
-| `bossGroup.shutdownGracefully(); workerGroup.shutdownGracefully();` | `server.stop(duration, unit)` (returns true if shutdown was clean) | `MuServerBuilder.java:664-689`, `MuServer.java:38` |
-| Graceful drain — implement yourself | `gracefulWait(Duration, MuStatsImpl)` polls every 100 ms | `MuServerBuilder.java:735-741` |
-| JVM shutdown hook | `MuServerBuilder.addShutdownHook(true)` | `MuServerBuilder.java:723-724` |
-
----
-
-## 4. 关键代码片段 (Key Code Snippets)
-
-### 4.1 The `block()` bridge — event-loop ↔ user code (`HttpExchange.java:61-96`)
+### 2.1 HTTP/1.1 — `Http1Connection.java`
 
 ```java
-void block(Runnable runnable) {
-    assert !inLoop() : "Should not be blocking on the event loop";
-    io.netty.util.concurrent.Future<?> task = ctx.executor().submit(runnable);
-    try {
-        task.get();
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new UncheckedIOException(new InterruptedIOException("Interrupted while writing"));
-    } catch (ExecutionException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof RuntimeException) {
-            throw (RuntimeException) cause;
-        } else {
-            throw new MuException("Error while writing response", cause);
-        }
-    }
-}
-
-void block(Callable<ChannelFuture> callable) {
-    assert !inLoop() : "Should not be blocking on the event loop";
-    io.netty.util.concurrent.Future<ChannelFuture> task = ctx.executor().submit(callable);
-    try {
-        task.get().sync();   // sync() also waits for ChannelFuture completion
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new UncheckedIOException(new InterruptedIOException("Interrupted while writing"));
-    } catch (ExecutionException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof RuntimeException) {
-            throw (RuntimeException) cause;
-        } else {
-            throw new MuException("Error while writing response", cause);
-        }
-    }
-}
+class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection {
+    private final NettyHandlerAdapter nettyHandlerAdapter;
+    private final MuStatsImpl serverStats;
+    private final MuStatsImpl connectionStats = new MuStatsImpl(null); // 每连接独立 stats
+    private final MuServerImpl server;
+    private final String proto;
+    private Exchange currentExchange = null; // HTTP/1.1 串行，一个 exchange 在飞
 ```
 
-**Threading model:** user handler code runs on the `muhandler` thread
-pool (`ThreadPoolExecutor(8, 400, 60s, SynchronousQueue, ...)`,
-`MuServerBuilder.java:649-653`). When the handler needs to do something
-that must touch the Netty event loop (a write, an upgrade), it calls
-`httpExchange.block(callable)`, which:
-1. Asserts we're NOT on the event loop.
-2. Submits the callable to the event-loop executor (a Netty
-   `SingleThreadEventLoop`).
-3. Blocks the calling thread on `task.get()`.
-4. Unwraps the exception and rethrows.
+**要点**：
+1. 直接继承 Netty 的 `SimpleChannelInboundHandler<Object>`，自己处理 `channelRead0`，**不依赖 Netty 默认的 `HttpObjectAggregator`** —— 走自己的 `HttpRequest` / `HttpContent` / `LastHttpContent` 拆装逻辑
+2. 单 active exchange 字段：HTTP/1.1 串行语义（一个请求完成前不能开始下一个）
+3. **显式 `ctx.channel().read()` 拉读**（不是 auto-read）—— 这是背压的关键，不调 read 就不会触发更多解码
+4. `handlerAdded` 时记录 `remoteAddress`、注册 stats、触发首次 `read()`
+5. `IdleStateEvent` 处理 idle timeout（HTTP/1.1 没在 keep-alive 窗口内发新请求 → 关闭 channel）
+6. 反向代理协议（`HAProxyMessageHandler`）通过 channel attribute `HA_PROXY_INFO` 传真实客户端 IP
 
-This pattern is what allows mu-server handlers to be **synchronous**
-even though all I/O is async — the thread pool is the "user code
-thread", and `block()` is the rendezvous with the I/O thread.
+### 2.2 HTTP/2 — `Http2Connection.java` + 自实现流控
 
-### 4.2 HTTP/2 per-stream DATA flow control (`Http2Connection.java:25-124`)
+mu-server 最值得注意的代码：**自实现 HTTP/2 流控**，因为 Netty 默认流控写大 body 会卡住。
 
 ```java
 abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler implements Http2FrameListener {
-
-    private final Map<Integer, Queue<DataReadData>> buffer = new HashMap<>();
-    private final Map<Integer, Boolean> wantsToRead = new HashMap<>();
-
-    @Override
-    public int onDataRead(ChannelHandlerContext ctx, int streamId,
-                         ByteBuf data, int padding, boolean endOfStream) {
-        Queue<DataReadData> buf = buffer.computeIfAbsent(streamId, k -> new LinkedList<>());
-        buf.add(new DataReadData(data.retain(), padding, endOfStream));
-        sendItMaybe(ctx, streamId);
-        return 0;   // do NOT consume flow-control window until app asks to read
-    }
+    private final Map<Integer, Queue<DataReadData>> buffer = new HashMap<>();  // per-stream buffer
+    private final Map<Integer, Boolean> wantsToRead = new HashMap<>();           // consumer wants
 
     protected void read(ChannelHandlerContext ctx, int streamId) {
-        if (!ctx.executor().inEventLoop()) {
-            ctx.executor().execute(() -> read(ctx, streamId));
-            return;
-        }
         wantsToRead.put(streamId, true);
         ctx.executor().submit(() -> sendItMaybe(ctx, streamId));
     }
 
     private void sendItMaybe(ChannelHandlerContext ctx, int streamId) {
-        if (ctx.channel().isActive()) {
-            Boolean wantsIt = wantsToRead.get(streamId);
-            if (wantsIt != null && wantsIt) {
-                Queue<DataReadData> queue = buffer.get(streamId);
-                if (queue != null) {
-                    DataReadData msg = queue.poll();
-                    if (msg != null) {
-                        wantsToRead.put(streamId, false);
-                        onDataRead0(ctx, streamId, msg.data, msg.padding, msg.endOfStream);
-                        msg.data.release();
-                    }
-                }
-            }
+        // 只在 wantsToRead=true 且 buffer 非空时才投递
+        ...
+    }
+}
+```
+
+**设计要点**：
+1. **自管 buffer**：每个 stream 一个 `Queue<DataReadData>`，存 `data + padding + endOfStream`
+2. **wantsToRead 模型**：consumer 必须显式 `read()` 表示想读，否则 `sendItMaybe` 不投递
+3. **手动 consumeBytes**：在 `onDataRead0` 后调用 `decoder().flowController().consumeBytes(stream, consumed)`，主动告诉 Netty "我处理完了"
+4. **解决 Netty 默认流控的痛点**：Netty 默认严格按窗口投递，写大 body 时容易 deadlock；mu-server 自己的 buffer 解耦了"帧到达"和"消费"
+5. `Http2Connection extends Http2ConnectionFlowControl` 增加 `exchanges: ConcurrentHashMap<Integer, HttpExchange>`（每 stream 一个 exchange）
+6. `onStreamError` 捕获 `HeaderListSizeException` → 431 Request Header Fields Too Large
+7. `onGoAwayRead` 关整条 connection；`onRstStreamRead` 取消单个 stream
+
+### 2.3 ALPN 协议协商 — `AlpnHandler.java`
+
+```java
+class AlpnHandler extends ApplicationProtocolNegotiationHandler {
+    AlpnHandler(...) { super(ApplicationProtocolNames.HTTP_1_1); } // 默认 HTTP/1.1 fallback
+
+    @Override
+    protected void configurePipeline(ChannelHandlerContext ctx, String protocol) {
+        if ("h2".equals(protocol)) {
+            ctx.pipeline().addLast(new Http2ConnectionBuilder(server, nettyHandlerAdapter).build());
+        } else if ("http/1.1".equals(protocol)) {
+            ctx.pipeline().remove(BackPressureHandler.NAME);
+            MuServerBuilder.setupHttp1Pipeline(ctx.pipeline(), nettyHandlerAdapter, server, proto);
         }
+    }
+}
+```
+
+**要点**：TLS 握手后根据 ALPN 协商结果**动态切换 pipeline**。HTTP/2 时清掉 HTTP/1 专属的 `BackPressureHandler`（HTTP/2 自带流控）。`exceptionCaught` 和 `handshakeFailure` 静默关闭 channel（不调 super，避免 Netty 默认 warn 日志）。
+
+### 2.4 HAProxy 协议 — `HAProxyMessageHandler.java`
+
+仅 20 行：
+
+```java
+class HAProxyMessageHandler extends SimpleChannelInboundHandler<HAProxyMessage> {
+    static final AttributeKey<ProxiedConnectionInfo> HA_PROXY_INFO =
+        AttributeKey.valueOf("HA_PROXY_INFO");
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, HAProxyMessage msg) {
+        ProxiedConnectionInfoImpl proxyConnectionInfo = ProxiedConnectionInfoImpl.fromNetty(msg);
+        ctx.channel().attr(HA_PROXY_INFO).set(proxyConnectionInfo);
+        if (!ctx.channel().config().isAutoRead()) ctx.read();
+    }
+}
+```
+
+**用途**：反向代理（HAProxy / nginx）后面部署时，TCP socket 的 `remoteAddress` 是代理的 IP，不是真实客户端 IP。`HAProxyMessageHandler` 解析 HAProxy 协议头，把真实 IP 存到 channel attribute，`Http1Connection.proxyInfo()` / `Http2Connection.proxyInfo()` 再读出来。
+
+### 2.5 背压与流控 — `BackPressureHandler.java` + `MuFlowControlHandler.java`
+
+**双层防护**：
+
+`BackPressureHandler`（72 行）：
+```java
+public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    if (!ctx.channel().isWritable()) {
+        toSend.add(new Delivery(msg, promise)); // 不可写就排队
+        return;
     }
     ...
 }
 ```
+当 channel TCP buffer 满了（不可写），消息进队列，等 `channelWritabilityChanged` 触发再排空。
 
-**Why custom flow control?** Standard Netty HTTP/2 flow control is
-window-based — the server tells the client how many bytes it can buffer
-before receiving more. mu-server needs a **second** control plane:
-the application code must explicitly call `request.inputStream()` (or
-`form()`, or `setReadListener`) before any DATA frame is delivered.
-`wantsToRead.put(streamId, true)` is set when that happens (via the
-`RequestState.RECEIVING_BODY` listener at
-`Http2Connection.java:282-286`):
+`MuFlowControlHandler`（225 行，**从 Netty 4.1.136 / 4.2.15+ 复制过来的修改版**）。原因：Netty 新版的 `FlowControlHandler` 在 `channelReadComplete` 时可能 consume 一个 outstanding read 但不投递消息 —— mu-server 要求"每次 read 必须投递至少一个解码消息"，所以 fork 了这个 handler。
+
+---
+
+## 3. 抽象层 (Abstraction Layer)
+
+**核心目的**：把 Netty 的底层概念（`ChannelHandlerContext`、`ByteBuf`、`FullHttpRequest`）包装成 handler 友好的接口（`MuRequest`、`MuResponse`），让 user code 写起来像 servlet 而不是 Netty。
+
+### 3.1 公开接口 — `MuRequest.java` + `MuResponse.java`
+
+**`MuRequest`**（237 行 public interface）暴露给 handler 的 API：
+- 元数据：`method()` / `uri()` / `serverURI()` / `headers()` / `contentType()`
+- 查询/表单/cookie：`query()` / `form()` / `cookie(name)`
+- 请求体：`inputStream()` / `readBodyAsString()`（**只能选其一读**）
+- 会话状态：`startTime()` / `attribute(key, value)`（handler 间传值）
+
+**`MuResponse`**（120 行 public interface）：
+- 元数据：`status(int)` / `headers()` / `contentType()`
+- body 写方式 4 选 1：`write(text)` / `sendChunk(text)` / `outputStream()` / `writer()`（**每响应只能用一种**）
+- 重定向：`redirect(url)`
+- 文档明确说明：`write` 只能调一次；想多次写用 `sendChunk`
+
+**MuRequest 的注释**很有信息量：
+> "You must close the input stream"（inputStream 用完必须关）
+> "只能读一次"（不能再用 readBodyAsString）
+
+这些约束在 Netty 原生 API 里没有，mu-server 在接口层面就讲清楚了。
+
+### 3.2 Netty 实现 — `NettyRequestAdapter.java` (549 行)
 
 ```java
-muReq.addChangeListener((exchange, newState) -> {
-    if (newState == RequestState.RECEIVING_BODY) {
-        read(ctx, streamId);     // ← unblocks the buffered DATA frames
-    }
-});
-```
-
-This pattern means: **handlers that don't read the body silently buffer
-the entire body up to `maxRequestSize` (24 MB), then throw `413`.**
-
-### 4.3 Response state machine (`NettyResponseAdaptor.java:288-315`)
-
-```java
-void complete() {
-    assert httpExchange.inLoop() : "Not in event loop";
-
-    ResponseState finalState = ResponseState.FINISHED;
-    ResponseState state = this.state;
-    if (state.endState()) return;
-    outputState(ResponseState.FINISHING);
-    boolean isFixedLength = headers.contains(HeaderNames.CONTENT_LENGTH);
-    ChannelFuture finishedFuture = null;
-    if (state == ResponseState.NOTHING) {
-        boolean addContentLengthHeader = !isHead && !isFixedLength
-            && status != 204 && status != 205 && status != 304;
-        finishedFuture = sendEmptyResponse(addContentLengthHeader);
-    } else if (state == ResponseState.STREAMING) {
-        boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
-        if (badFixedLength) {
-            log.warn("Invalid response for " + request + " because " + declaredLength
-                + " bytes was the expected length, however " + bytesStreamed + " bytes were sent.");
-            finalState = ResponseState.ERRORED;
-        }
-        if (finalState == ResponseState.FINISHED) {
-            finishedFuture = writeLastContentMarker();
-        }
-    }
-    outputState(finishedFuture, finalState);
+class NettyRequestAdapter implements MuRequest {
+    private volatile RequestState state = RequestState.HEADERS_RECEIVED;
+    final ChannelHandlerContext ctx;
+    private final HttpRequest nettyRequest;
+    private final URI serverUri;
+    private final URI uri;
+    private final Headers headers;
+    private volatile RequestBodyReader requestBodyReader;
+    private final RequestParameters query;
+    private List<Cookie> cookies;
+    private String contextPath = "";
+    private String relativePath;
+    private Map<String, Object> attributes;
+    private volatile AsyncHandleImpl asyncHandle;
+    ...
 }
 ```
 
-The state machine enforces:
-- HEAD requests never have a body (`!isHead`).
-- 204/205/304 responses never have a body.
-- `Content-Length` mismatch → ERRORED.
-- `outputState(future, state)` attaches a listener that switches to
-  ERRORED on write failure.
+**关键实现细节**：
 
-### 4.4 The "mu-" Content-Encoding hack (`Http2Response.java:53-71`)
+1. **状态机 `RequestState`**：`HEADERS_RECEIVED` → `RECEIVING_BODY` → `COMPLETE` / `ERRORED`，状态变更通过 `CopyOnWriteArrayList<RequestStateChangeListener>` 通知
+2. **Forwarded header 处理**：`getUri()` 检查 `Forwarded` / `X-Forwarded-*` header，反向代理场景下用真实客户端 IP/host 构造 `uri()`，而 `serverURI()` 用 backend 真实 URI
+3. **Cookie 解析**：用 Netty 自带的 `ServerCookieDecoder`
+4. **Query 解码**：用 Netty 的 `QueryStringDecoder(uri, true)`（`true` 表示 useMode=NFC）
+5. **Body 读取**：`RequestBodyReader` 抽象 + `RequestBodyReaderInputStreamAdapter` 把 Netty 的 chunked body 流式包成 `InputStream`
+
+### 3.3 Netty 实现 — `NettyResponseAdaptor.java` (367 行)
 
 ```java
-private ChannelFuture writeHeaders(boolean isEnd) {
-    assert ctx.executor().inEventLoop() : "Not in event loop";
-    headers.entries.status(httpStatus().codeAsText());
+abstract class NettyResponseAdaptor implements MuResponse {
+    protected final boolean isHead;
+    private volatile ResponseState state = ResponseState.NOTHING;
+    protected final NettyRequestAdapter request;
+    protected int status = 200;
+    ...
 
-    if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH),
-                                headers.get(HeaderNames.CONTENT_TYPE))) {
-        headers.set(HeaderNames.VARY, getVaryWithAE(headers.get(HeaderNames.VARY)));
-        CharSequence toUse = Http2Connection.compressionToUse(request.headers());
-        if (toUse != null && !headers.entries.contains(HeaderNames.CONTENT_ENCODING)) {
-            // By setting the header value, the CompressorHttp2ConnectionEncoder added
-            // by the Http2ConnectionBuilder will encode the bytes.
-            // The mu- prefix is what indicates to the compressor that we want to compress
-            // it, and MuGzipHttp2ConnectionEncoder removes the mu- prefix.
-            headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + toUse);
+    protected void outputState(ResponseState state) {
+        assert request.ctx.executor().inEventLoop() : "Status change to " + state + " not in event loop";
+        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        // 强制约束：状态变更必须在 Netty event loop
+        ResponseState oldStatus = this.state;
+        if (oldStatus.endState()) {
+            throw new IllegalStateException("Didn't expect to get a status update to " + state + ...);
+        }
+        this.state = state;
+        for (ResponseStateChangeListener listener : listeners) {
+            listener.onStateChange(httpExchange, state);
         }
     }
-    ChannelFuture future = encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.voidPromise());
-    if (isEnd) {
-        ctx.channel().flush();
-    }
-    return future;
 }
 ```
 
-The `mu-` prefix is the trick: mu-server wants to apply size+mime
-gating to its compression, but Netty's
-`CompressorHttp2ConnectionEncoder` always compresses if the
-`Content-Encoding` is set. By using `mu-gzip`, mu-server signals
-intent; `MuGzipHttp2ConnectionEncoder.fixEncoding` (line 60-66) strips
-the prefix and Netty then sees `gzip` and compresses.
+**状态机 `ResponseState`**：`NOTHING` → `STREAMING` → `COMPLETE` / `ERRORED` / `UPGRADED`
 
-### 4.5 The handler dispatcher (`NettyHandlerAdapter.java:27-57`)
+**关键约束**：`assert request.ctx.executor().inEventLoop()` —— 状态变更必须在 Netty event loop 线程。如果在 handler executor 里调 outputState，会抛 AssertionError。这是 §3.4 `HttpExchange.block()` 存在的原因。
+
+`outputState(future, successState)` 重载版本：等 `ChannelFuture` 完成后自动切换状态。`addChangeListener` 允许 `HttpExchange` 监听响应状态变化。
+
+### 3.4 协调者 — `HttpExchange.java` (479 行)
+
+**整个 mu-server 抽象层的"中央协调器"**。一个 HttpExchange = 一个 NettyRequestAdapter + 一个 NettyResponseAdaptor + 一个 ChannelHandlerContext。
 
 ```java
-void onHeaders(HttpExchange muCtx) {
-    executor.execute(() -> {
-        if (muCtx.state().endState()) return;
-        NettyRequestAdapter request = muCtx.request;
-        NettyResponseAdaptor response = muCtx.response;
-        try {
-            boolean handled = false;
-            for (MuHandler muHandler : muHandlers) {
-                handled = muHandler.handle(request, response);
-                if (handled) break;
-                if (request.isAsync()) {
-                    throw new IllegalStateException(
-                        muHandler.getClass() + " returned false however this is not allowed " +
-                        "after starting to handle a request asynchronously.");
+class HttpExchange implements ResponseInfo, Exchange {
+    final ChannelHandlerContext ctx;
+    final NettyRequestAdapter request;
+    final NettyResponseAdaptor response;
+    private final int streamId; // -1 for HTTP/1, stream ID for HTTP/2
+    private final HttpConnection connection;
+    private volatile HttpExchangeState state = HttpExchangeState.IN_PROGRESS;
+    private final List<HttpExchangeStateChangeListener> listeners = new CopyOnWriteArrayList<>();
+
+    // ============ 关键方法：跨线程同步 ============
+    void block(Runnable runnable) {
+        assert !inLoop() : "Should not be blocking on the event loop";
+        io.netty.util.concurrent.Future<?> task = ctx.executor().submit(runnable);
+        try { task.get(); } catch (...) { ... }
+    }
+
+    void block(Callable<ChannelFuture> callable) {
+        assert !inLoop() : "Should not be blocking on the event loop";
+        io.netty.util.concurrent.Future<ChannelFuture> task = ctx.executor().submit(callable);
+        try { task.get().sync(); } catch (...) { ... }
+    }
+}
+```
+
+**`block()` 是 mu-server 跨线程同步的核心**：
+
+- `assert !inLoop()`：不能在 Netty event loop 里调 block（会死锁）
+- `ctx.executor().submit(task)`：把任务 submit 回 Netty event loop
+- `task.get()`：当前线程（handler executor）**阻塞等 Netty 完成**
+- 这样 handler 可以在独立线程池里跑，但需要写响应时通过 block() 跨线程同步
+
+**为什么不用 Netty 的 `ChannelFuture.addListener` 异步模型**：因为那会要求 handler 写成全异步回调地狱。`block()` 让 handler 可以保持同步写法，同时又不阻塞 Netty event loop（见 §8.1）。
+
+### 3.5 辅助类 — Headers / Cookie / ForwardedHeader / Mutils
+
+| 类 | 行数 | 作用 |
+|---|---|---|
+| `Headers.java` | 400+ | Multi-map 形式 HTTP headers，自带 `contentType()` / `forwarded()` / `authorization()` 等便利方法 |
+| `Cookie.java` | 中 | Cookie 值对象，支持 `httpOnly()` / `secure()` / `sameSite()` |
+| `ForwardedHeader.java` | 250+ | 解析 RFC 7239 Forwarded header（含 for/proto/host 字段） |
+| `Mutils.java` | 中 | `notNull` / `coalesce` 等小工具 |
+
+---
+
+## 4. 分发层 (Dispatch Layer)
+
+### 4.1 核心调度器 — `NettyHandlerAdapter.java` (98 行)
+
+**mu-server 最重要的文件**。解决 Netty 单线程模型的核心痛点：
+
+```java
+class NettyHandlerAdapter {
+    private final List<MuHandler> muHandlers;
+    private final ExecutorService executor;
+
+    void onHeaders(HttpExchange muCtx) {
+        executor.execute(() -> {                        // ← 关键！handler 不在 Netty event loop
+            if (muCtx.state().endState()) return;
+            NettyRequestAdapter request = muCtx.request;
+            NettyResponseAdaptor response = muCtx.response;
+            try {
+                boolean handled = false;
+                for (MuHandler muHandler : muHandlers) {
+                    handled = muHandler.handle(request, response);
+                    if (handled) break;
+                    if (request.isAsync()) {
+                        throw new IllegalStateException("returned false however this is not allowed after starting to handle a request asynchronously.");
+                    }
                 }
+                if (!handled) throw new NotFoundException();  // ← 默认 404 fallback
+                if (!request.isAsync() && !response.outputState().endState()) {
+                    response.flushAndCloseOutputStream();
+                    muCtx.block(muCtx::complete);            // ← 写完后 block 等 Netty
+                }
+            } catch (Throwable ex) {
+                useCustomExceptionHandlerOrFireIt(muCtx, ex);
             }
-            if (!handled) {
-                throw new NotFoundException();   // → 404 via onException
-            }
-            if (!request.isAsync() && !response.outputState().endState()) {
-                response.flushAndCloseOutputStream();
-                muCtx.block(muCtx::complete);    // block on event loop
-            }
-        } catch (Throwable ex) {
-            useCustomExceptionHandlerOrFireIt(muCtx, ex);
-        }
-    });
-}
-```
+        });
+    }
 
-Three rules enforced:
-1. Handlers run in registration order.
-2. First handler returning `true` wins; subsequent handlers skipped.
-3. After `handleAsync()`, a handler MUST return `true` — otherwise the
-   request would be left dangling.
-4. If no handler returns `true`, throw `NotFoundException` → 404.
-
-### 4.6 The 500 error template (`HttpExchange.java:388-448`)
-
-```java
-public boolean onException(ChannelHandlerContext ctx, Throwable cause) {
-    assert inLoop() : "onException not called from nio event loop";
-    if (state.endState()) { log.warn(...); return true; }
-    boolean streamUnrecoverable = true;
-    try {
-        if (!response.hasStartedSendingData()) {
-            if (request.requestState() != RequestState.ERRORED) {
-                streamUnrecoverable = false;
-            }
-            WebApplicationException wae;
-            if (cause instanceof WebApplicationException) {
-                wae = (WebApplicationException) cause;
+    static void useCustomExceptionHandlerOrFireIt(HttpExchange exchange, Throwable ex) {
+        MuServerImpl server = (MuServerImpl) exchange.request.server();
+        try {
+            if (server.unhandledExceptionHandler != null
+                && !(ex instanceof RedirectionException)
+                && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
+                exchange.response.flushAndCloseOutputStream();
+                exchange.block(exchange::complete);
             } else {
-                String errorID = "ERR-" + UUID.randomUUID();
-                log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
-                wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
+                exchange.fireException(ex);
             }
-            Response exResp = wae.getResponse();
-            if (exResp == null) exResp = Response.serverError().build();
-            int status = exResp.getStatus();
-            if (status == 429 || status == 408 || status == 413) {
-                streamUnrecoverable = true;
-            }
-            response.status(status);
-            boolean isHttp1 = request.protocol().equals("HTTP/1.1");
-            MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response, isHttp1);
-            if (streamUnrecoverable && isHttp1) {
-                response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-            }
-            response.contentType(ContentTypes.TEXT_HTML_UTF8);
-            String message = wae.getMessage();
-            message = exceptionMessageMap.getOrDefault(message, message);
-            response.writeOnLoop("<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>"
-                + Mutils.htmlEncode(message) + "</p>")
-                .addListener(f -> {
-                    ResponseState state = f.isSuccess() ? ResponseState.FULL_SENT : ResponseState.ERRORED;
-                    response.outputState(f, state);
-                });
-        } else {
-            log.info(cause.getClass().getName() + " while handling " + request
-                + " - note a " + response.status + " was already sent and the client may have received an incomplete response.");
+        } catch (Throwable handlerException) {
+            exchange.fireException(handlerException);
         }
-    } catch (Exception e) {
-        log.warn("Error while processing processing " + cause + " for " + request, e);
-    } finally {
-        if (streamUnrecoverable) {
-            response.onCancelled(ResponseState.ERRORED);
-            request.onCancelled(ResponseState.ERRORED, cause);
-        }
-    }
-    return streamUnrecoverable;
-}
-```
-
-Notable:
-- UUID error ID is logged **only on the server**, never sent to the client (only the user-friendly `wae.getMessage()` is rendered).
-- `404 NotFoundException` has a customised message
-  (`"This page is not available. Sorry about that."`,
-  `HttpExchange.java:39`) — the only custom override.
-- 429 / 408 / 413 cause stream unrecoverability → `Connection: close`.
-
-### 4.7 Live HTTPS cert reload (`MuServerImpl.java:124-133`)
-
-```java
-@Override
-public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
-    Mutils.notNull("newSSLContext", newHttpsConfig);
-    try {
-        SslContext nettySslContext = newHttpsConfig.toNettySslContext(http2Config.enabled);
-        sslContextProvider.set(nettySslContext);
-        ((SSLInfoImpl) sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
-    } catch (Exception e) {
-        throw new MuException("Error while changing SSL Certificate. The old one will still be used.", e);
     }
 }
 ```
 
-`SslContextProvider` (`SslContextProvider.java:15-46`) holds an
-`AtomicReference<SslContext>`; `MuSniHandler`'s mapping is built from a
-`Supplier`, so each new connection reads the latest context. **Existing
-connections keep their old `SslHandler`** (Netty installs the handler
-during the handshake, so mid-connection swaps aren't possible — but
-this is fine, the old cert was valid at the time).
+**三层分发逻辑**：
 
-### 4.8 The CSRF defence (`handlers/CSRFProtectionHandler.java:39-75`)
+1. **Handler 链按顺序执行**：遍历 `muHandlers`，第一个返回 `true` 的 handler 消费请求（这是 mu-server 的"中间件"模式）
+2. **404 fallback**：所有 handler 返回 `false` → 抛 `NotFoundException` → 触发全局 exception handler → 转 404 响应
+3. **异常隔离**：handler 抛任何异常都走 `useCustomExceptionHandlerOrFireIt`，先尝试用户自定义 exception handler，否则用 `exchange.fireException`（默认 JAX-RS ExceptionMapper）
 
+**异步约束**：如果 handler 启动异步处理（`request.isAsync()` 返回 true），就不能再返回 false（必须明确消费请求）。
+
+### 4.2 生命周期 + Builder — `MuServer.java` + `MuServerImpl.java` + `MuServerBuilder.java`
+
+**`MuServer`**（168 行 public interface）：
 ```java
-@Override
-public boolean handle(MuRequest request, MuResponse response) throws Exception {
-    Method method = request.method();
-    if (method == Method.GET || method == method == Method.HEAD || method == Method.OPTIONS) {
-        return false;       // safe methods always allowed
-    }
-    if (bypassPaths.contains(request.uri().getRawPath())) {
-        return false;
-    }
-    String secFetchSite = request.headers().get("Sec-Fetch-Site");
-    if ("same-origin".equals(secFetchSite) || "none".equals(secFetchSite)) {
-        return false;
-    }
-    if (secFetchSite == null || secFetchSite.isEmpty()) {
-        // Fallback to Origin header (older browsers)
-        String origin = request.headers().get("Origin");
-        if (origin == null || origin.isEmpty()) {
-            return false;     // probably non-browser
-        }
-        URI uri = request.uri();
-        String host = uri.getHost();
-        int port = uri.getPort();
-        String hostHeader = port > 0 ? host + ":" + port : host;
-        if (origin.endsWith("://" + hostHeader) || trustedOrigins.contains(origin)) {
-            return false;
-        }
-    } else {
-        // Cross-origin request detected
-        if (trustedOrigins.contains(request.headers().get("Origin"))) {
-            return false;
-        }
-    }
-    return rejectionHandler.handle(request, response);
+public interface MuServer {
+    default void stop() { stop(0, TimeUnit.MILLISECONDS); }
+    boolean stop(long duration, TimeUnit unit);  // ← 优雅关停
+    URI uri();                                     // HTTPS 优先，否则 HTTP
+    URI httpUri();
+    URI httpsUri();
+    MuStats stats();
+    Set<HttpConnection> activeConnections();
+    InetSocketAddress address();
+    static String artifactVersion() { ... }
 }
 ```
 
-This is a **tokenless CSRF defence** — it relies on the browser sending
-`Sec-Fetch-Site: same-origin` / `cross-site` / `none`, which all modern
-browsers do. Old browsers fall back to `Origin` matching.
+`stop(duration, unit)` 是核心 API：在 grace period 内等 in-flight 请求完成，超时强制 abort。
 
-### 4.9 Server shutdown (`MuServerBuilder.java:664-689`)
+**`MuServerImpl`**（167 行 package-private）：
+```java
+class MuServerImpl implements MuServer {
+    void onStarted(URI httpUri, URI httpsUri, Function<Duration, Boolean> shutdown,
+                   InetSocketAddress address, SslContextProvider sslContextProvider) {
+        if (httpUri == null && httpsUri == null) {
+            throw new IllegalArgumentException("One of httpUri and httpsUri must not be null");
+        }
+        ...
+    }
+
+    @Override
+    public boolean stop(long duration, TimeUnit unit) {
+        return shutdown.apply(Duration.ofMillis(unit.toMillis(duration)));
+    }
+
+    @Override
+    public URI uri() {
+        return httpsUri != null ? httpsUri : httpUri;
+    }
+}
+```
+
+跟踪所有 active connections（`Set<HttpConnection>`，用 `ConcurrentHashMap.newKeySet()`），shutdown 时遍历 close。
+
+**`MuServerBuilder`**（**835 行，最大单文件**）—— fluent 配置入口：
 
 ```java
-Function<Duration, Boolean> shutdown = (gracefulDuration) -> {
-    try {
-        if (wheelTimer != null) wheelTimer.stop();
-        for (Channel channel : channels) channel.close().sync();
+public class MuServerBuilder {
+    static { MuRuntimeDelegate.ensureSet(); }   // ← 静态块触发 JAX-RS 初始化
 
-        bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+    private static final int DEFAULT_NIO_THREADS = Math.min(16, Runtime.getRuntime().availableProcessors() * 2);
 
-        boolean hasInFlightRequests = gracefulWait(gracefulDuration, stats);
-        if (hasInFlightRequests) {
-            log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
-        }
+    private long minimumGzipSize = 1400;
+    private int httpPort = -1;
+    private int httpsPort = -1;
+    private int maxHeadersSize = 8192;
+    private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
+    private int nioThreads = DEFAULT_NIO_THREADS;
+    private final List<MuHandler> handlers = new ArrayList<>();
+    private boolean gzipEnabled = true;
+    ...
+    private HttpsConfigBuilder sslContextBuilder;
+    private Http2Config http2Config;
 
-        workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
-        finalHandlerExecutor.shutdown();
+    public static MuServerBuilder muServer() { ... }
+    public static MuServerBuilder httpServer() { ... }
+    public static MuServerBuilder httpsServer() { ... }
 
-        return hasInFlightRequests;
-    } catch (Exception e) {
-        log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
-        return false;
+    public MuServerBuilder withHttpPort(int port) { ... }
+    public MuServerBuilder withHttpsPort(int port) { ... }
+    public MuServerBuilder withHttpsConfig(HttpsConfigBuilder c) { ... }
+    public MuServerBuilder withGzip(boolean enabled) { ... }
+    public MuServerBuilder withMaxHeadersSize(int size) { ... }
+    public MuServerBuilder withMaxUrlSize(int size) { ... }
+    public MuServerBuilder withMaxRequestSize(long bytes) { ... }
+    public MuServerBuilder withIdleTimeout(Duration d) { ... }
+    public MuServerBuilder withRequestTimeout(Duration d) { ... }
+    public MuServerBuilder withHandlerExecutor(ExecutorService exec) { ... }
+    public MuServerBuilder withNioThreads(int n) { ... }
+    public MuServerBuilder withRateLimiter(RateLimitSelector s) { ... }
+    public MuServerBuilder withHAProxyProtocolEnabled(boolean e) { ... }
+    public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler h) { ... }
+    public MuServerBuilder addHandler(MuHandler h) { ... }
+    public MuServerBuilder addHandler(MuHandlerBuilder b) { ... }
+    public MuServerBuilder addHandler(Method m, String uriTemplate, RouteHandler h) { ... }
+
+    public MuServer start() { ... }
+}
+```
+
+`MuServerBuilder` 把 Netty 的 `ServerBootstrap` / `EventLoopGroup` / `ChannelInitializer` 全部包装起来。`start()` 内部会：
+1. 创建 `ServerBootstrap` + `NioEventLoopGroup(nioThreads)`（默认 16 线程）
+2. 设置 child handler（`Http1Connection` / `Http2Connection`）
+3. 如果 HTTPS，加 `SslHandler`
+4. 如果 ALPN + HTTP/2，加 `AlpnHandler`
+5. 绑定端口，启动监听
+6. 返回 `MuServer`
+
+### 4.3 路由 — `Routes.java` + `RouteHandler.java`
+
+DSL 极简：
+
+```java
+public class Routes {
+    public static MuHandler route(Method method, String uriTemplate, RouteHandler muHandler) {
+        UriPattern uriPattern = UriPattern.uriTemplateToRegex(uriTemplate);
+        return new MuHandler() {
+            @Override
+            public boolean handle(MuRequest request, MuResponse response) throws Exception {
+                boolean methodMatches = method == null || method.equals(request.method());
+                // ... URI 匹配逻辑
+            }
+        };
     }
-};
+}
+
+public interface RouteHandler {
+    void handle(MuRequest request, MuResponse response, Map<String,String> pathParams) throws Exception;
+}
 ```
 
-Sequence:
-1. Stop the rate-limit `HashedWheelTimer`.
-2. Close all channels (TCP).
-3. Shut down boss group (no new accepts).
-4. **Wait up to `gracefulDuration` for in-flight requests to finish**
-   (`gracefulWait` polls every 100 ms).
-5. Shut down worker group.
-6. Shut down handler executor.
-
-`MuServer.stop(duration, unit)` returns `false` if there were in-flight
-requests that didn't finish — the caller knows shutdown was hard.
+URI 模板支持路径参数 + 正则约束，例如：`/things/{id : [0-9]+}` 把 `id` 提取为 pathParams。底层 `UriPattern.uriTemplateToRegex` 把 URI 模板转正则。
 
 ---
 
-## 5. 使用场景 (Use Cases vs Peers)
+## 5. JAX-RS 支持 (`io.muserver.rest.*`)
 
-### 5.1 Quick decision matrix
+~80+ 文件，是 mu-server 最大的子模块。
 
-| Your situation | Recommended framework | Why |
-|---|---|---|
-| Small microservice / edge function with strict jar-size | **mu-server** | ~600 KB jar, no DI |
-| Large app with many beans, DI, AOP | Spring Boot | Mature ecosystem |
-| Custom protocol (not HTTP) | bare Netty | Full control over every byte |
-| Reactive composition (compose, flatMap) is the norm | Vert.x | First-class reactive |
-| HTTP/2 + REST + OpenAPI + auth, no DI wanted | **mu-server + `RestHandler`** | Built-in JAX-RS + OpenAPI |
-| Want to embed an HTTP server in another application | **mu-server** | Single artifact, builder DSL |
-| Need bean validation (`@Valid`, `@NotNull`) | Spring Boot / Quarkus | mu-server has no Bean Validation |
+### 5.1 入口 — `MuRuntimeDelegate.java`
 
-### 5.2 Concrete scenarios where mu-server shines
+```java
+public class MuRuntimeDelegate extends RuntimeDelegate {
+    public static synchronized RuntimeDelegate ensureSet() {
+        if (singleton == null) {
+            singleton = new MuRuntimeDelegate();
+            RuntimeDelegate.setInstance(singleton);
+        }
+        return singleton;
+    }
 
-1. **Embedded web server in a desktop app.** A user-facing tool needs
-   a small web UI (e.g. an admin panel). The whole UI is a few MB of
-   JS/CSS served by `ResourceHandler` plus a few REST endpoints.
-   Spring Boot is overkill; bare Netty is too low-level. mu-server is
-   the sweet spot.
+    private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
-2. **Live cert rotation.** A reverse proxy or load balancer needs to
-   reload its cert without dropping connections. mu-server's
-   `MuServer.changeHttpsConfig(...)` + `MuSniHandler` Supplier lets
-   you swap certs atomically.
-
-3. **Server-sent events broadcast.** A real-time dashboard needs
-   one-way push to many clients. `AsyncSsePublisher` returns a
-   `CompletionStage` so a slow client doesn't block other publishers.
-
-4. **HA Proxy deployment.** Behind an L4 LB that uses PROXY protocol.
-   `MuServerBuilder.withHAProxyProtocolEnabled(true)` adds the
-   decoder+handler in the right place; `HttpConnection.proxyInfo()`
-   exposes the source address.
-
-### 5.3 Concrete scenarios where mu-server falls short
-
-1. **Bean Validation.** No `jakarta.validation` dependency; `@Valid` is
-   not honoured.
-
-2. **Multi-tenant with DI.** No `Application` scanning; no Spring-style
-   context. If you need to resolve `@Inject` on JAX-RS resources, you
-   must wire it manually.
-
-3. **Large file streaming.** `outputStream(int)` is a blocking
-   `BufferedOutputStream` per write; there's no zero-copy async write
-   to a `ByteBuffer`. (Use `AsyncHandle.write(ByteBuffer)` instead.)
-
-4. **HTTP/1 pipelining.** A single `currentExchange` field per
-   connection effectively disables pipelining — clients must use
-   multiple connections.
-
-5. **Bean Validation, async validation, ConstraintViolationException
-   mapping.** All §7 of the JAX-RS spec — not implemented.
-
----
-
-## 6. 0.0.3 → 2.2.9 → 2.4.2 演进 (Evolution)
-
-### 6.1 Code-volume growth
-
-| Version | Files | LOC (src/main/java) | Δ |
-|---|---|---|---|
-| 0.0.3-SNAPSHOT | 258 | 36,317 | (baseline) |
-| 2.2.9 | 240 | 30,755 | **−15%** (consolidation: smaller files, fewer comments) |
-| 2.4.2 | 248 | 58,492 | **+90%** (large new files: `SchemaObjectBuilder` 942 LOC, `JaxRSResponse` 736 LOC, `RestHandlerBuilder` 598 LOC, `MuUriBuilder` 519 LOC) |
-
-The 2.4.2 LOC bump is mostly **OpenAPI + JAX-RS surface area** —
-`SchemaObjectBuilder` alone is 942 lines because it walks Java
-reflection to produce OpenAPI schemas for arbitrary POJOs.
-
-### 6.2 Package-structure evolution
-
-The package layout has been **stable across all three versions**:
-
-```
-io.muserver              ← protocol + dispatch + public API
-io.muserver.handlers     ← static-file, CORS, CSRF, HttpsRedirector
-io.muserver.rest         ← JAX-RS (jakarta.ws.rs 3.0)
-io.muserver.openapi      ← OpenAPI 3 generator
+    private MuRuntimeDelegate() {
+        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
+        headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
+        headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
+        headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
+        headerDelegates.put(EntityTag.class, new EntityTagDelegate());
+        headerDelegates.put(Link.class, new LinkHeaderDelegate());
+        headerDelegates.put(Date.class, new DateHeaderDelegate());
+    }
+}
 ```
 
-### 6.3 Feature additions per version (verified from source + release notes)
+**`ensureSet()` 在 `MuServerBuilder` 静态初始化时被调用**，注册 mu 自己的 JAX-RS RuntimeDelegate。这是 JDK JAX-RS SPI 机制：`RuntimeDelegate.setInstance()` 后所有 JAX-RS API 走 mu 的实现。
 
-| Feature | 0.0.3 | 2.2.9 | 2.4.2 | Evidence (2.4.2) |
-|---|---|---|---|---|
-| HTTP/1.1 server | ✅ | ✅ | ✅ | `Http1Connection.java` |
-| TLS + HTTPS | ✅ | ✅ | ✅ | `HttpsConfigBuilder.java` |
-| HTTP/2 + ALPN | ❌ | ✅ | ✅ | `Http2Connection.java`, `AlpnHandler.java` |
-| HA Proxy protocol | ❌ | ✅ | ✅ | `HAProxyMessageHandler.java` |
-| SNI multi-cert | ❌ | ✅ | ✅ | `SniKeyManager.java`, `MuSniHandler.java` |
-| Rate limiter | ❌ | ✅ | ✅ | `RateLimiterImpl.java` |
-| **CSRF (modern, Sec-Fetch-Site)** | ❌ | ❌ | ✅ | `handlers/CSRFProtectionHandler.java` |
-| Live SSL reload | ❌ | ❌ | ✅ | `MuServerImpl.changeHttpsConfig()` |
-| JAX-RS (jakarta.ws.rs 3.0) | ❌ | ✅ | ✅ | `rest/` package (60 files) |
-| OpenAPI 3 generation | ❌ | ✅ | ✅ | `openapi/` package (52 files) |
-| SSE (sync + async) | ✅ | ✅ | ✅ | `SsePublisher.java`, `AsyncSsePublisher.java` |
-| WebSocket | ✅ | ✅ | ✅ | `WebSocketHandler.java`, `MuWebSocketSessionImpl.java` |
-| **HTTP/2 gzip (`mu-` prefix)** | ❌ | ❌ | ✅ | `MuGzipHttp2ConnectionEncoder.java`, `MuCompressorHttp2ConnectionEncoder.java` |
-| **Custom flow control** | ❌ | ❌ | ✅ | `MuFlowControlHandler.java` (file-level comment explains Netty 4.1.136/4.2.15+ change) |
-| **`PreReader` (HTTP/1 disconnect)** | ❌ | ❌ | ✅ | `PreReader.java` (file-level comment references SO 66075288) |
-| **`BackPressureHandler`** | ❌ | ❌ | ✅ | `BackPressureHandler.java` |
-| **Selective compression** | ❌ | ❌ | ✅ | `SelectiveHttpContentCompressor.java` |
-| **`CollectionParameterStrategy` guard** | ❌ | ❌ | ✅ | `RestHandlerBuilder.java:575-593` |
-| File upload (`multipart/*`) | ✅ | ✅ | ✅ | `RequestBodyReader.MultipartFormReader` |
-| Cookie (Secure / HttpOnly / SameSite) | ✅ | ✅ | ✅ | `Cookie.java`, `CookieBuilder.java` |
-| Forwarded header parsing (RFC 7239) | ✅ | ✅ | ✅ | `ForwardedHeader.java` |
-| `ResourceHandler` with HTTP Range | partial | ✅ | ✅ | `handlers/ResourceHandler.java` |
-| Directory listing | ✅ | ✅ | ✅ | `DirectoryLister.java` |
-| `ResourceCustomizer` hook | ❌ | ✅ | ✅ | `handlers/ResourceCustomizer.java` |
-| HttpsRedirector | ❌ | ✅ | ✅ | `handlers/HttpsRedirector.java` |
-| Per-request idle timeout | ✅ | ✅ | ✅ | `HttpExchange.scheduleReadTimeout()` |
-| Per-request max size | ✅ | ✅ | ✅ | `MuServerBuilder.withMaxRequestSize()` (24 MB default) |
-| `MuStats` counters | ✅ | ✅ | ✅ | `MuStatsImpl.java` |
-| `ResponseCompleteListener` / `RequestRejectListener` | ✅ | ✅ | ✅ | `NettyHandlerAdapter.onResponseComplete()` |
+### 5.2 子包内容（节选）
 
-### 6.4 Public-API additions (verified in source)
+```
+rest/
+├── MuRuntimeDelegate.java           # JAX-RS 入口
+├── JaxRSRequest.java / JaxRSResponse.java  # Request/Response → JAX-RS 适配
+├── JaxClassLocator.java / JaxMethodLocator.java  # 注解扫描
+├── UriInfoImpl.java / UriPattern.java / PathMatch.java  # URI 模板匹配
+├── EntityProviders.java / BinaryEntityProviders.java / BuiltInParamConverterProvider.java
+│   └── JSON / XML / 二进制 / 自定义 entity 编解码
+├── BasicAuthSecurityFilter.java / Authorizer.java  # HTTP Basic Auth
+├── CorsFilter.java                  # per-resource CORS（不是顶层 CORSHandler）
+├── JaxOutboundSseEvent.java / SseBroadcasterImpl.java / JaxSseEventSinkImpl.java
+│   └── JAX-RS 标准 SSE 适配
+├── HtmlDocumentor.java              # 自动生成 API 文档 HTML
+├── OpenApiGenerator.java / SchemaGenerator.java / OpenApiProcessor.java
+│   └── OpenAPI 3.x 自动生成（从 @ApiResponse / @Schema 等注解）
+├── ApiResponse.java / ApiResponses.java / Description.java / DescriptionData.java
+│   └── OpenAPI 注解支持
+└── ... (更多 entity providers, filters, interceptors)
+```
 
-2.4.2 adds the following **new public types** vs 2.2.9:
+### 5.3 JAX-RS 关键特点
 
-- `io.muserver.AsyncSsePublisher` (and `AsyncSsePublisherImpl`)
-- `io.muserver.handlers.CSRFProtectionHandler`
-- `io.muserver.handlers.CSRFProtectionHandlerBuilder`
-- `io.muserver.Http2Config` + `Http2ConfigBuilder` (new in 2.4.2; the
-  HTTP/2 was first added in 2.2.9 but the config type is new here)
-- `io.muserver.rest.CollectionParameterStrategy` (new enum)
-
-2.4.2 **does not remove or rename** any public API from 2.2.9 (binary
-compatibility preserved).
+1. **完整支持 jakarta.ws.rs 3.0+**：`@Path` / `@GET` / `@POST` / `@PUT` / `@DELETE` / `@HEAD` / `@OPTIONS` / `@PATCH`，路径参数 / 查询参数 / 表单 / header / cookie 注入
+2. **Async + SSE 内建**：`@Suspended AsyncResponse` 异步响应；`SseEventSink` 流式广播
+3. **OpenAPI 3 自动生成**：`@OpenAPI` 注解 + `HtmlDocumentor` 自动生成 API 文档页
+4. **Entity providers 自动协商 content-type**：JSON (Jackson) / XML (JAXB) / 二进制 / 自定义
+5. **Per-resource CORS**：`@CorsFilter` 注解单独控制每个 resource 的 CORS 策略（区别于顶层 `handlers.CORSHandler` 全局策略）
+6. **HTTP Basic Auth**：`@BasicAuthSecurityFilter` + `Authorizer` 函数式接口
+7. **ExceptionMappers**：默认实现覆盖所有 JAX-RS 异常类型 → HTTP 状态码映射
 
 ---
 
-## 7. 限制 / 已知问题 (Limitations)
+## 6. 功能特性 (Features)
 
-### 7.1 Functional limitations
+### 6.1 SSE — `SsePublisher.java` + `AsyncSsePublisher.java`
 
-| Limitation | Impact | Workaround |
-|---|---|---|
-| HTTP/1 pipelining disabled (single `currentExchange` per connection) | Browsers use 6 connections per origin anyway; only affects scripted clients that pipeline | Use HTTP/2 or multiple connections |
-| WebSocket only over HTTP/1 (no RFC 8441) | HTTP/2 clients can't open WebSocket | Use HTTPS endpoint without `withHttp2Config(http2Enabled())` for WS paths |
-| HTTP/2 body buffer caps at `maxRequestSize` before any data is delivered | JAX-RS `@GET` methods that don't read the body will hit `413` if body > 24 MB | Validate content-length at routing, or use HTTP/1 |
-| Rate limiter is approximate (sliding counter via `HashedWheelTimer`) | Brief bursts at window edges | Use external rate limiter for DDoS-grade |
-| `Http2Connection.closeAllAndDisconnect` does RST_STREAM on in-flight streams during shutdown | Clients may see abrupt connection termination during graceful stop | None |
-| Default handler executor is bounded (8–400); `RejectedExecutionException` → 503 | Under sudden load, requests get 503'd | Use `MuServerBuilder.withHandlerExecutor(...)` with a queue |
-| No HTTP/2 server push | n/a (deprecated by browsers anyway) | — |
-| OpenAPI reflection ignores Jackson `@JsonIgnore` partly | Schema may include fields the API serialises away | `addCustomSchema(...)` overrides |
-| No Bean Validation | No `@NotNull`/`@Size`/etc. enforcement | Validate manually in JAX-RS methods |
-| JAX-RS resources must be singletons | No per-request instantiation | Pre-instantiate and pass via constructor |
-| No `@Priority` on filters/interceptors | Run order = registration order | Register in desired order |
-| Per-connection stats use a separate `MuStatsImpl` (no traffic counter) | Global "connection-completed" not aggregated | Read per-connection via `HttpConnection.completedRequests()` |
+`SsePublisher`（290 行）：
+```java
+public class SsePublisher implements AsyncHandle {
+    private final MuResponse response;
+    private final ScheduledExecutorService scheduler;
+    private final long heartbeatIntervalMs;
+    private volatile SseState state = SseState.INITIAL;
+    private final ScheduledFuture<?> heartbeatTask;
 
-### 7.2 Behavioural notes / surprises
+    public void send(String name, String data, String id, Duration retry) {
+        // 写 SSE 帧: "event: <name>\ndata: <data>\nid: <id>\nretry: <retry>\n\n"
+    }
+}
+```
 
-1. **Idle timeout default inconsistency** — the Javadoc on
-   `MuServerBuilder.withIdleTimeout(...)` says "5 minutes" but the code
-   uses `TimeUnit.MINUTES.toMillis(10)` (`MuServerBuilder.java:62`).
-   The actual default is 10 minutes.
+**SSE 帧格式**：
+```
+event: message\n
+data: {"x": 1}\n
+id: 42\n
+retry: 3000\n
+\n
+```
 
-2. **"Async handlers run first" promise** — the Javadoc on
-   `MuServerBuilder.addHandler(MuHandler)` says "all async handlers are
-   executed before synchronous handlers", but
-   `NettyHandlerAdapter.onHeaders` runs handlers in pure registration
-   order — no async-first reordering happens.
+**两阶段生命周期**：
+- `SsePublisher`（同步调用）：handler 写完响应后由 `NettyHandlerAdapter` 接管
+- `AsyncSsePublisher`（异步）：handler 退出后 publisher 仍存活，由 `AsyncHandle.complete()` / `close()` 控制
 
-3. **`@Suspended AsyncResponse` requires the exchange to stay open** —
-   if a JAX-RS resource accepts `@Suspended AsyncResponse asyncResp` and
-   the request method does not call `asyncResp.resume(...)`, the
-   connection stays open until the `requestIdleTimeoutMillis` (2 min)
-   fires.
+**心跳机制**：默认每 15s 发一个注释帧（`: heartbeat\n\n`），防止代理服务器关闭 idle connection。
 
-4. **HTTP/2 stream RST on body error** — if a JAX-RS resource fails
-   midway through a streamed body, the stream is reset. The client may
-   not see a clean HTTP status.
+### 6.2 TLS / HTTPS — `HttpsConfigBuilder.java` + 22 文件
 
-5. **CSRF handler bypass is by raw path** — `bypassPaths.contains(request.uri().getRawPath())` is exact match. A bypass for `/api/health` won't match `/api/health/sub`.
+`HttpsConfigBuilder` 是 mu-server TLS 支持的总入口：
 
-6. **`unsignedLocalhost()` cert is hard-coded** — expires 36500 days
-   after generation; no rotation story (but it's only for testing).
+```java
+public class HttpsConfigBuilder {
+    public HttpsConfigBuilder withKeyStore(File keystore, String password) { ... }
+    public HttpsConfigBuilder withCert(File cert, File key) { ... }
+    public HttpsConfigBuilder withProtocols(String... protocols) { ... }
+    public HttpsConfigBuilder withCiphers(String... ciphers) { ... }
+    public HttpsConfigBuilder withNeedClientAuth(boolean need) { ... }
+    public HttpsConfigBuilder withWantClientAuth(boolean want) { ... }
+    ...
+    public HttpsConfig build() { ... }  // → Netty SslContext
+}
+```
 
-7. **`Http2ConfigBuilder.http2EnabledIfAvailable()` is a heuristic** —
-   checks `"1.8".equals(System.getProperty("java.specification.version"))`
-   which doesn't account for OpenJDK builds without ALPN. The doc
-   explicitly warns this may not always return the correct result.
+**高级特性**：
+- **SNI 多证书**：支持 per-hostname 证书选择（Netty `SniHandler` + `SslContext` map）
+- **客户端证书认证**：`ClientCertificateAuthentication` + OCSP stapling
+- **协议白名单**：可禁用 TLS 1.0/1.1，只允许 TLS 1.2+
+- **加密套件选择**：可显式指定允许的 cipher suites
+- **Let's Encrypt**：`letsencrypt.org` 集成（单独包 `letsencrypt/`）
 
-8. **`NettyRequestAdapter.attribute(String, null)` throws** — the key
-   validation rejects null values (`Mutils.notNull("key", key)`),
-   but the doc says null is allowed to remove an attribute. Actually
-   no — the check is on `key`, not `value`. But `attributes().put(...)`
-   does accept nulls.
+### 6.3 限流 — `RateLimiter.java`
 
-### 7.3 Security observations
+```java
+public interface RateLimiter {
+    boolean tryAcquire(MuRequest request);
+}
 
-- `Cookie.builder()` defaults to **Secure + HttpOnly + SameSite=Strict** — the safest defaults.
-- `CSRFProtectionHandler` uses `Sec-Fetch-Site` (modern, no tokens) — works with all modern browsers.
-- `MuSniHandler` sets `setUseCipherSuitesOrder(true)` — **server** picks cipher (best practice).
-- `SSLInfo` exposes only the *enabled* cipher/protocol sets — safe to log.
-- `Headers.toString()` redacts `authorization`, `cookie`, `set-cookie` by default.
-- Error responses never leak stack traces — only a UUID error ID is logged with the stack.
-- `requestIdleTimeoutMillis` (2 min default) caps slow-client body uploads → DoS mitigation.
-- `maxRequestSize` (24 MB default) caps total body size.
-- `maxHeadersSize` (8 KB default) → 431 on overflow.
-- `maxUrlSize` (8175 chars default) → 414 on overflow.
+public interface RateLimitSelector {
+    RateLimiter rateLimiterFor(MuRequest request);  // 按 IP / path / user 决定限流策略
+}
+```
 
-### 7.4 Performance notes
+典型实现：令牌桶 / 滑动窗口计数器。`MuServerBuilder.withRateLimiter(selector)` 注册全局 selector。
 
-- HTTP/1.1 throughput per connection is bounded by single-request RTT (no pipelining).
-- HTTP/2 default `maxConcurrentStreams = 200` is conservative.
-- `GlobalTrafficShapingHandler` is always added (with 0/0 rate limits) so `MuStats.bytesSent/Read` work — small per-byte overhead.
-- `HashedWheelTimer` for rate-limit decrements runs single-threaded (`mu-limit-timer`).
-- `readBodyAsString()` does a full `CompositeByteBuf.toString(charset)` copy — for large bodies prefer `inputStream()`.
+### 6.4 统计 — `MuStats.java` + `MuStatsImpl.java`
+
+`MuStatsImpl`（100+ 行）：
+```java
+class MuStatsImpl implements MuStats {
+    private final AtomicLong connectionsOpen = new AtomicLong();
+    private final AtomicLong requestsHandled = new AtomicLong();
+    private final AtomicLong requestsActive = new AtomicLong();
+    private final AtomicLong bytesReceived = new AtomicLong();
+    private final AtomicLong bytesSent = new AtomicLong();
+    private final LongAdder[] statusCounts = new LongAdder[6]; // 1xx-5xx + total
+
+    void onConnectionOpened() { connectionsOpen.incrementAndGet(); }
+    void onConnectionClosed() { connectionsOpen.decrementAndGet(); }
+    void onRequestStarted() { requestsActive.incrementAndGet(); }
+    void onRequestEnded(MuRequest req) {
+        requestsActive.decrementAndGet();
+        requestsHandled.incrementAndGet();
+        statusCounts[statusCodeClass(req.responseStatus())].increment();
+    }
+}
+```
+
+`MuServer.stats()` 暴露 `MuStats`（read-only view），用户可定期 poll 输出到 Prometheus / StatsD。
+
+### 6.5 WebSocket — `ws/` 子包
+
+独立子包，~10 个文件：
+- `WebSocketHandler.java` — 入口
+- `WebSocketSession.java` — 会话抽象
+- `BaseWebSocket.java` — 给用户的同步 API（`sendText` / `sendBinary` / `onMessage`）
+- `AsyncWebSocket.java` — 异步回调 API
+
+`handlers.WebSocketHandlerBuilder` 注册 WebSocket 路由：
+```java
+MuServerBuilder.httpsServer()
+    .addHandler(WebSocketHandlerBuilder.webSocketHandler("/ws")
+        .withConnectionHandler(session -> {
+            session.sendText("Welcome!");
+            session.messageHandler(msg -> { ... });
+        }))
+```
+
+底层走 Netty 的 `WebSocketServerProtocolHandler` + 自定义 frame decoder/encoder。
+
+### 6.6 异步 — `AsyncHandle.java`
+
+```java
+public interface AsyncHandle {
+    boolean isAsync();
+    void write(String text);     // 流式追加
+    void sendChunk(String text); // 同 write
+    void complete();             // 结束响应
+    void close();                // 主动关闭连接
+}
+```
+
+实现 `AsyncHandleImpl`：内部维护一个 `boolean async`，handler 调 `request.handleAsync()` 后 `isAsync()` 返回 true，分发器不再自动 flush，由 handler 手动控制 complete/close。
 
 ---
 
-## 8. Reading map (drafts ↔ final report)
+## 7. Handler 库 (Built-in Handlers)
 
-| Final-report section | Draft(s) |
+`io.muserver.handlers.*` 包，~15 个文件。
+
+| Handler | 作用 |
 |---|---|
-| §2 Architecture overview | 01-protocol-layer, 02-abstract-layer, 03-dispatcher-layer |
-| §3 Netty comparison | 01-protocol-layer, 02-abstract-layer, 03-dispatcher-layer |
-| §4 Code snippets | 01 §3.4 (flow control), 02 §3.2 (state machine), 02 §4 (response state), 06 (gzip hack), 03 §2 (dispatcher), 03 §3 (URI templates) |
-| §5 Use cases | 10-evolution-and-comparison §2 |
-| §6 Evolution | 10-evolution-and-comparison §1 |
-| §7 Limitations | 10-evolution-and-comparison §3, 04 (handlers), 05 (REST README gaps) |
+| `CORSHandler` | 全局 CORS 策略：withAllowedOrigins / withAllowedMethods / withAllowedHeaders / withExposedHeaders / withMaxAge |
+| `CSRFProtectionHandler` | 双重提交 cookie 模式 CSRF 防护 |
+| `HttpsRedirector` | HTTP → HTTPS 自动重定向（可选 301 / 308） |
+| `ResourceHandler` | 静态文件服务（按 MIME / Range / cache headers） |
+| `BareDirectoryRequestAction` | 目录列表（ResourceHandler 子组件） |
+| `HealthCheckHandler` | `/health` endpoint |
 
-All drafts are at `/tmp/mu-server-2.4.2/.omo/drafts/01..10-*.md`.
+**`ResourceHandler` 配置示例**：
+```java
+.addHandler(ResourceHandlerBuilder.fileSystemHandler("public")
+    .withPathToServeFrom("/var/www")
+    .withDefaultFile("index.html")
+    .withMimeTypes(Map.of(".md", "text/markdown")))
+```
 
 ---
 
-## 9. Source-code index (line numbers for fast lookup)
+## 8. 关键设计模式 (Critical Design Patterns)
+
+### 8.1 线程模型 (Threading Model)
 
 ```
-src/main/java/io/muserver/
-├── HttpExchange.java             480 lines  — state machine, block(), onException
-├── MuRequest.java                237 lines  — public interface
-├── MuResponse.java               121 lines  — public interface
-├── NettyRequestAdapter.java      549 lines  — implements MuRequest, body reader
-├── NettyResponseAdaptor.java     367 lines  — response state machine
-├── Http1Connection.java          309 lines  — HTTP/1 handler
-├── Http2Connection.java          582 lines  — HTTP/2 handler + flow control
-├── Http2ConnectionFlowControl    (in Http2Connection.java:25-124)
-├── Http2ConnectionBuilder.java    36 lines  — builds Http2ConnectionHandler
-├── AlpnHandler.java               46 lines  — protocol dispatcher
-├── MuSniHandler.java              37 lines  — SNI + cipher preference
-├── HAProxyMessageHandler.java     20 lines  — PROXY protocol
-├── MuFlowControlHandler.java     225 lines  — local flow-control handler
-├── BackPressureHandler.java       72 lines  — outbound queue
-├── PreReader.java                 63 lines  — disconnect detection
-├── SelectiveHttpContentCompressor 29 lines  — gzip gating
-├── MuGzipHttp2ConnectionEncoder  137 lines  — `mu-` prefix trick
-├── MuCompressorHttp2ConnectionEncoder 24 lines
-├── MuServer.java                 168 lines  — public server handle
-├── MuServerImpl.java             167 lines  — internal impl
-├── MuServerBuilder.java          835 lines  — public builder DSL
-├── NettyHandlerAdapter.java       98 lines  — dispatcher
-├── HttpsConfigBuilder.java       459 lines  — TLS builder
-├── SslContextProvider.java        46 lines  — live SSL reload
-├── SniKeyManager.java              80 lines  — SNI alias selection
-├── Headers.java                  412 lines  — public header API
-├── Http1Headers.java             325 lines
-├── Http2Headers.java             347 lines
-├── ForwardedHeader.java          282 lines  — RFC 7239 parser
-├── Mutils.java                   285 lines  — utilities
-├── ServerSettings.java            66 lines  — settings bundle
-├── RateLimiterImpl.java           71 lines  — sliding counter
-├── RateLimitBuilder.java          87 lines
-├── MuStatsImpl.java              114 lines  — counters
-├── ContextHandler.java            73 lines
-├── ContextHandlerBuilder.java     97 lines
-├── WebSocketHandler.java          70 lines
-├── WebSocketHandlerBuilder.java  115 lines
-├── MuWebSocketSessionImpl.java   313 lines
-├── SsePublisher.java             200 lines  — sync SSE
-├── AsyncSsePublisher.java        193 lines  — async SSE
-├── AsyncHandle.java               59 lines  — public async API
-├── Http1Response.java            103 lines
-├── Http2Response.java             99 lines
-├── ChunkedHttpOutputStream.java   34 lines
-├── Cookie.java                   107 lines
-├── ParameterizedHeader.java      ~150 lines
-└── ... (other small types) ~30 files
-
-src/main/java/io/muserver/handlers/    13 files  ~1,600 lines
-src/main/java/io/muserver/rest/       62 files  ~5,500 lines
-src/main/java/io/muserver/openapi/    52 files  ~4,000 lines
+                   ┌─────────────────────┐
+   TCP socket ──→  │ Netty event loop    │  ← NIO thread (默认 16 个)
+                   │ - 拆 HttpRequest    │
+                   │ - 装 LastHttpContent │
+                   └─────────┬───────────┘
+                             │ executor.execute(() -> handler.handle(req, resp))
+                             ▼
+                   ┌─────────────────────┐
+                   │ Handler executor    │  ← 独立线程池（用户代码）
+                   │ - user logic        │
+                   │ - 调用 resp.write() │
+                   └─────────┬───────────┘
+                             │ HttpExchange.block(task)
+                             │ ctx.executor().submit(task).get()  ← 同步等
+                             ▼
+                   ┌─────────────────────┐
+                   │ Netty event loop    │  ← 同一 NIO thread
+                   │ - 真正写 socket     │
+                   │ - 触发 outputState  │
+                   └─────────────────────┘
 ```
 
-Total: 248 files / 58,492 LOC (src/main/java) / 63,680 LOC (all java).
+**为什么这样设计**：
+1. Netty 默认要求 handler 全部跑在 event loop 上 → slow handler 会阻塞整个 channel 的 I/O
+2. Mu-server 把"用户逻辑"扔到独立 executor → Netty 永远只做"拆消息 + 写 socket"
+3. 但写 socket 又必须在 Netty thread（状态机 assert 限制）→ 用 `block()` 把 handler 线程**同步等** Netty 完成
+4. 对用户而言：handler 写法保持同步（不需要 callback hell），但 Netty 永远不被阻塞
 
-## 相关笔记
+**权衡**：跨线程同步有微小开销（thread context switch），所以 mu-server 也支持 async API（`AsyncHandle` / `AsyncSsePublisher`）作为完全异步的 escape hatch。
 
-- [[draft-01-protocol-layer|协议层 (HTTP/1.1, HTTP/2, ALPN, HAProxy, 背压)]]
-- [[draft-02-abstract-layer|抽象层 (Request/Response/HttpExchange)]]
-- [[draft-03-dispatcher-layer|分发层 (NettyHandlerAdapter + MuServerBuilder + 路由)]]
-- [[draft-04-handlers-library|内置 Handler 库 (CORS/CSRF/StaticResource/HttpRedirect)]]
-- [[draft-05-rest-jax-rs|JAX-RS 3.0 / REST 支持]]
-- [[draft-06-openapi|OpenAPI 集成]]
-- [[draft-07-async-sse-websocket|异步 / SSE / WebSocket]]
-- [[draft-08-tls-sni-http2|TLS / SNI / HTTP/2]]
-- [[draft-09-utility-classes|工具类]]
-- [[draft-10-evolution-and-comparison|【对比】0.0.3 → 2.2.9 → 2.4.2 演进]]
-- [[moc|MOC 导航]]
-- [[mu-server-netty-analysis/summary|0.0.3-SNAPSHOT 旧版分析]]
-- [[mu-server-2.2.9-analysis/summary|2.2.9 历史分析]]
+### 8.2 状态机 (State Machines)
+
+mu-server 有 **3 个独立状态机** + **4 个状态变化点**：
+
+| 状态机 | 状态 | 触发点 |
+|---|---|---|
+| `RequestState` | `HEADERS_RECEIVED` → `RECEIVING_BODY` → `COMPLETE` / `ERRORED` | `NettyRequestAdapter.outputState()` |
+| `ResponseState` | `NOTHING` → `STREAMING` → `COMPLETE` / `ERRORED` / `UPGRADED` | `NettyResponseAdaptor.outputState()` |
+| `HttpExchangeState` | `IN_PROGRESS` → `COMPLETE` / `ERRORED` / `UPGRADED` | `HttpExchange.onReqOrRespStateChange()` |
+
+**状态变化监听**：`CopyOnWriteArrayList<...StateChangeListener>`（读多写少，写不阻塞读）
+
+**状态一致性约束**：`assert ctx.executor().inEventLoop()` —— 所有状态变更必须在 Netty event loop 上
+
+### 8.3 HTTP/2 流控（已在 §2.2 详述）
+
+简言之：自实现 buffer + wantsToRead + 手动 consumeBytes，绕过 Netty 默认流控的 deadlock 风险。
+
+### 8.4 优雅关停 (Graceful Shutdown)
+
+```java
+boolean stop(long duration, TimeUnit unit) {
+    // 1. 停止接受新连接：boss group shutdownGracefully
+    // 2. 在 duration 内等现有请求完成
+    // 3. 超时后强制 abort 所有 in-flight exchanges
+    // 4. worker group shutdownGracefully
+    return allCompleted;  // true 表示在 duration 内全部完成
+}
+```
+
+`HttpExchange` 跟踪 in-flight 数，`MuServerImpl` 定期 poll。完整实现见 `MuServerImpl.stopInternal()`。
+
+---
+
+## 9. Netty 原生 vs mu-server 对照表
+
+| 能力 | Netty 原生 | mu-server |
+|---|---|---|
+| 配置 server | `ServerBootstrap.group().channel().childHandler()...` 链式 API | `MuServerBuilder.httpsServer().addHandler(...)...start()` fluent API |
+| 接收请求 | `extends SimpleChannelInboundHandler<HttpRequest>` 重写 `channelRead0` | 实现 `MuHandler.handle(req, resp)` |
+| 线程模型 | 所有 handler 跑 event loop | handler 跑独立 executor，event loop 只做 I/O |
+| 跨线程写响应 | `ChannelFuture.addListener`（异步回调） | `HttpExchange.block()`（同步等） |
+| HTTP/1 | `HttpServerCodec` + `HttpObjectAggregator` | 自定义拆装 `Http1Connection`（更细粒度背压） |
+| HTTP/2 | `Http2FrameCodec` + 默认流控 | 自实现 `Http2ConnectionFlowControl`（避免大 body deadlock） |
+| HTTPS | `SslHandler` + 手动配置 | `HttpsConfigBuilder`（keystore / SNI / 客户端证书） |
+| ALPN | `ApplicationProtocolNegotiationHandler` 自己装 pipeline | `AlpnHandler.configurePipeline()` 自动切换 |
+| 路由 | 完全没有 | `Routes.route(method, uriTemplate, handler)` + URI 模板参数 |
+| 中间件 | `ChannelPipeline.addLast(handler)` 链 | `addHandler(MuHandler)` 链（按顺序第一个 `true` 消费） |
+| 异常处理 | `exceptionCaught(ctx, ex)` | `UnhandledExceptionHandler` + `ExceptionMapper`（JAX-RS 风格） |
+| 请求/响应抽象 | `HttpRequest` / `FullHttpResponse`（底层） | `MuRequest` / `MuResponse`（handler 友好的高层 API） |
+| Body 读取 | `ByteBuf` + 手动 release | `inputStream()` / `readBodyAsString()` |
+| Cookies | `ServerCookieDecoder` + 自己构造 | `request.cookies()` / `response.cookie(builder)` |
+| Forwarded header | 自己解析 RFC 7239 | `Headers.forwarded()` 自动解析 |
+| 限流 | 完全自己写 | `RateLimiter` + `RateLimitSelector` 接口 |
+| 统计 | 完全自己写 | `MuStats` + `MuStatsImpl`（connectionsOpen / requestsHandled / bytesSent） |
+| SSE | 自己写 text/event-stream 帧 | `SsePublisher` / `AsyncSsePublisher`（自动心跳） |
+| WebSocket | `WebSocketServerProtocolHandler` + 自己处理 frame | `WebSocketHandlerBuilder` + `BaseWebSocket` 同步 API |
+| JAX-RS | 完全不支持 | `rest.MuRuntimeDelegate` + 80+ 文件完整实现 |
+| OpenAPI | 完全不支持 | `OpenApiGenerator` 自动生成 |
+| Let's Encrypt | 完全不支持 | `letsencrypt/` 子包 |
+| HAProxy | 自己装 `netty-codec-haproxy` | `HAProxyMessageHandler` 一行启用 |
+| 优雅关停 | `EventLoopGroup.shutdownGracefully()` | `MuServer.stop(duration, unit)` 等 in-flight |
+| 背压 | `channel.write()` 默认可写检查 | `BackPressureHandler` 自定义队列 + `MuFlowControlHandler` Netty fork |
+
+---
+
+## 10. 演化对比 (0.0.3 → 2.2.9 → 2.4.2)
+
+| 维度 | 0.0.3-SNAPSHOT | 2.2.9 | **2.4.2** |
+|---|---|---|---|
+| Java 文件数 | 258 | 259 | **248**（精简 -10）|
+| 总行数 | 36,317 | 30,755 | **31,840**（+1,085）|
+| Netty 版本 | 4.1.137.Final | 4.1.135.Final | **4.1.135.Final** |
+| JDK | - | - | **11** (source/target) |
+| 协议层 | HTTP/1 + HTTP/2 + 流控 + ALPN + HAProxy | 同 | **同**（无变化）|
+| 抽象层 | `NettyRequestAdapter` + `NettyResponseAdaptor` + `HttpExchange` + `MuRequest/Response` | 同 | **同**（API 微调）|
+| 分发层 | `NettyHandlerAdapter` + `MuServerBuilder` (34KB) | `MuServerBuilder` (~50KB) | **`MuServerBuilder` (835 行，最大单文件)** |
+| 路由 | `Routes` + URI 模板 | 同 | **同**（稳定）|
+| JAX-RS | 手写 annotation scanner | 同 | **同**（成熟稳定）|
+| SSE | `SsePublisher` + `AsyncSsePublisher` | 同 | **同** |
+| TLS | `HttpsConfigBuilder` (22KB) | 同 | **同** |
+| RateLimiter | 接口 + 内置实现 | 同 | **同** |
+| Async | `AsyncHandle` | 同 | **同** |
+| WebSocket | `ws/` 子包 | 同 | **同** |
+
+**核心观察**：
+- 架构骨架（6 层）在 0.0.3 就已成型，后续版本主要是 bug 修复 + 文档改进 + 边缘场景处理
+- 2.4.2 比 2.2.9 少 10 个文件但行数更多 → **模块合并 + 实现细节扩充**（比如 `HttpExchange` 加了更多边界条件处理）
+- 协议层（HTTP/1, HTTP/2, 流控, ALPN）完全没变 → 这是 mu-server 的"稳定面"
+
+---
+
+## 11. 限制 / 已知问题
+
+1. **没有 HTTP/3 (QUIC)**：2.4.2 仍只支持 HTTP/1.1 + HTTP/2。Netty 4.1.x 的 QUIC codec 不成熟，mu-server 选择等上游稳定
+2. **`HttpServerCodec` 没复用**：mu-server 自己重写了 HTTP/1 拆装逻辑，好处是背压细粒度控制，坏处是维护负担（Netty 上游 bug fix 不直接受益）
+3. **MU 自己的 HTTP/2 流控**：fork 了 Netty 的 `FlowControlHandler`，跟上游版本会逐步 drift
+4. **单进程 / 单 host**：没有内置 cluster / session replication，需要外部方案（Redis 等）
+5. **Async API 比同步 API 复杂**：`AsyncHandle` 的回调模型容易出错，新手应该先用同步 `write()` + `block()`
+6. **JAX-RS 子模块紧耦合 mu-server 核心**：不像 Jersey / RESTEasy 可以独立使用，mu-server 的 JAX-RS 必须通过 `MuServerBuilder` 注册
+
+---
+
+## 12. 适用场景
+
+✅ **适合**：
+- **微服务 / 小到中型 REST API**：启动快（亚秒）、资源占用低
+- **JAX-RS 标准 API**：自动 OpenAPI 文档、注解驱动
+- **SSE 长连接**：原生 publisher + 自动心跳
+- **HTTPS + Let's Encrypt 自动续签**：内置集成
+- **嵌入式 HTTP server**：作为 library 嵌入 Java 应用
+
+❌ **不适合**：
+- **企业级大应用**：Spring 全家桶生态深度比不上
+- **极限性能**：mu-server 的跨线程同步有开销，裸 Netty + 自写更适合
+- **需要直接控制 Netty pipeline**：mu-server 抽象层会卡你
+- **HTTP/3 / QUIC**：当前不支持
+- **多语言场景**：纯 JVM
+
+---
+
+## 13. 关键文件清单 (速查表)
+
+| 文件 | 行数 | 角色 |
+|---|---|---|
+| `io.muserver.MuServer` | 168 | 公开 server 接口 |
+| `io.muserver.MuServerImpl` | 167 | server 实现 |
+| `io.muserver.MuServerBuilder` | **835** | fluent builder（最大单文件）|
+| `io.muserver.MuRequest` | 237 | request 公开接口 |
+| `io.muserver.MuResponse` | 120 | response 公开接口 |
+| `io.muserver.MuStats` | 50 | 统计接口 |
+| `io.muserver.MuStatsImpl` | 110 | 统计实现 |
+| `io.muserver.NettyHandlerAdapter` | 98 | **核心调度器** |
+| `io.muserver.Http1Connection` | ~250 | HTTP/1.1 实现 |
+| `io.muserver.Http2Connection` | ~400 | HTTP/2 实现 |
+| `io.muserver.Http2ConnectionFlowControl` | ~250 | 自实现 HTTP/2 流控 |
+| `io.muserver.HttpExchange` | 479 | 协调者 + block() |
+| `io.muserver.NettyRequestAdapter` | 549 | request Netty 包装 |
+| `io.muserver.NettyResponseAdaptor` | 367 | response Netty 包装 |
+| `io.muserver.AlpnHandler` | 80 | ALPN 协商 |
+| `io.muserver.HAProxyMessageHandler` | 20 | HAProxy 协议 |
+| `io.muserver.BackPressureHandler` | 72 | TCP 背压 |
+| `io.muserver.MuFlowControlHandler` | 225 | Netty FlowControl fork |
+| `io.muserver.Headers` | 400+ | header multi-map |
+| `io.muserver.Cookie` | - | cookie 值对象 |
+| `io.muserver.ForwardedHeader` | 250+ | RFC 7239 |
+| `io.muserver.Routes` | - | URI 路由 |
+| `io.muserver.RouteHandler` | - | route 回调接口 |
+| `io.muserver.AsyncHandle` | - | 异步 API |
+| `io.muserver.handlers.CORSHandler` | - | 全局 CORS |
+| `io.muserver.handlers.CSRFProtectionHandler` | - | CSRF |
+| `io.muserver.handlers.HttpsRedirector` | - | HTTP→HTTPS |
+| `io.muserver.handlers.ResourceHandler` | - | 静态文件 |
+| `io.muserver.SsePublisher` | 290 | SSE 同步 |
+| `io.muserver.AsyncSsePublisher` | - | SSE 异步 |
+| `io.muserver.HttpsConfigBuilder` | - | TLS 配置 |
+| `io.muserver.ClientCertificateAuthentication` | - | 客户端证书 |
+| `io.muserver.RateLimiter` | - | 限流接口 |
+| `io.muserver.rest.MuRuntimeDelegate` | - | JAX-RS 入口 |
+| `io.muserver.rest.ResourceBuilder` | - | JAX-RS resource 注册 |
+| `io.muserver.rest.UriInfoImpl` | - | URI 信息 |
+| `io.muserver.rest.EntityProviders` | - | entity 编解码 |
+| `io.muserver.rest.OpenApiGenerator` | - | OpenAPI 3 生成 |
+| `io.muserver.rest.HtmlDocumentor` | - | API 文档 HTML |
