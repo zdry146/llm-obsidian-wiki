@@ -3,16 +3,16 @@ title: "mu-server 2.4.2 源码分析 — Spark 直接版 MOC"
 category: synthesis
 tags: [java, netty, mu-server, framework, direct-analysis, spark, moc, index, 2.4.2]
 sources: ["mu-server 2.4.2 @ tag mu-server-2.4.2 (https://github.com/3redronin/mu-server)"]
-summary: "mu-server 2.4.2 (Java 11 + Netty 4.1.135.Final) 全量源码分析入口 — Spark 直接读源码的中文模块化报告 (248 文件 / 31840 行)。"
+summary: "mu-server 2.4.2 (Java 1.8 + Netty 4.1.137.Final) 全量源码分析入口 — Spark 直接读源码的中文模块化报告 (248 文件 / 31840 行)，已 2026-09-12 review 校正 16 项事实。"
 provenance:
-  extracted: 0.90
-  inferred: 0.05
-  ambiguous: 0.05
-base_confidence: 0.88
-lifecycle: draft
-lifecycle_changed: 2026-09-11
+  extracted: 0.95
+  inferred: 0.03
+  ambiguous: 0.02
+base_confidence: 0.95
+lifecycle: reviewed
+lifecycle_changed: 2026-09-12
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # mu-server 2.4.2 源码分析 — Map of Content

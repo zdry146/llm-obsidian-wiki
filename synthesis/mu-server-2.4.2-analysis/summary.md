@@ -5,21 +5,21 @@ tags: [java, netty, mu-server, framework, direct-analysis, spark, 2.4.2]
 sources: ["mu-server 2.4.2 @ tag mu-server-2.4.2 (https://github.com/3redronin/mu-server)"]
 summary: "Spark 直接读 mu-server 2.4.2 源码 (248 Java 文件 / 31840 行) 的中文模块化分析报告：协议层 / 抽象层 / 分发层 / 路由 / JAX-RS / 功能特性 / 关键设计模式 / Netty 原生对照表 / 演化对比。"
 provenance:
-  extracted: 0.90
-  inferred: 0.05
-  ambiguous: 0.05
-  base_confidence: 0.88
-lifecycle: draft
-lifecycle_changed: 2026-09-11
+  extracted: 0.95
+  inferred: 0.03
+  ambiguous: 0.02
+  base_confidence: 0.95
+lifecycle: reviewed
+lifecycle_changed: 2026-09-12
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # mu-server 2.4.2 源码分析 — Spark 直接版
 
-> **版本**: mu-server 2.4.2 @ tag (commit `086a921` "Update Netty version to 4.1.135.Final")
-> **依赖**: Netty 4.1.135.Final + jakarta.ws.rs 3.0
-> **JDK**: Java 11 (source/target)
+> **版本**: mu-server 2.4.2 @ tag (commit `ae091538` "Merge pull request #206 from 3redronin/agent/2.x-pr-204-colon-paths")
+> **依赖**: Netty 4.1.137.Final (默认走 `<netty.version.4.1>`) + jakarta.ws.rs 3.0
+> **JDK**: Java 1.8 (source/target = 1.8，pom 显式 `<source>1.8</source>`)
 > **规模**: 248 Java 文件 / 31,840 行
 > **包结构**: `io.muserver` (核心) + `io.muserver.handlers` (内置 handler) + `io.muserver.rest` (JAX-RS)
 
@@ -66,25 +66,23 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 5. `IdleStateEvent` 处理 idle timeout（HTTP/1.1 没在 keep-alive 窗口内发新请求 → 关闭 channel）
 6. 反向代理协议（`HAProxyMessageHandler`）通过 channel attribute `HA_PROXY_INFO` 传真实客户端 IP
 
-### 2.2 HTTP/2 — `Http2Connection.java` + 自实现流控
+### 2.2 HTTP/2 — `Http2Connection.java`（582 行，含自实现流控）
 
-mu-server 最值得注意的代码：**自实现 HTTP/2 流控**，因为 Netty 默认流控写大 body 会卡住。
+mu-server 最值得注意的代码：**自实现 HTTP/2 流控**（直接做在 `Http2Connection` 内部，没有拆成独立文件），因为 Netty 默认流控写大 body 会卡住。流控核心片段大致如下（合并自 `Http2Connection` 内部多个 inner class）：
 
 ```java
-abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler implements Http2FrameListener {
-    private final Map<Integer, Queue<DataReadData>> buffer = new HashMap<>();  // per-stream buffer
-    private final Map<Integer, Boolean> wantsToRead = new HashMap<>();           // consumer wants
+// Http2Connection extends Http2ConnectionHandler implements Http2FrameListener
+// 内部 per-stream buffer 字段（简化）：
+private final Map<Integer, Queue<DataReadData>> buffer = new ConcurrentHashMap<>();
+private final Map<Integer, Boolean> wantsToRead = new ConcurrentHashMap<>();
 
-    protected void read(ChannelHandlerContext ctx, int streamId) {
-        wantsToRead.put(streamId, true);
-        ctx.executor().submit(() -> sendItMaybe(ctx, streamId));
-    }
-
-    private void sendItMaybe(ChannelHandlerContext ctx, int streamId) {
-        // 只在 wantsToRead=true 且 buffer 非空时才投递
-        ...
-    }
+protected void read(ChannelHandlerContext ctx, int streamId) {
+    wantsToRead.put(streamId, true);
+    ctx.executor().submit(() -> sendItMaybe(ctx, streamId));
 }
+
+// sendItMaybe: 只在 wantsToRead=true 且 buffer 非空时才投递
+// onDataRead0 后调: decoder().flowController().consumeBytes(stream, consumed)
 ```
 
 **设计要点**：
@@ -92,7 +90,7 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
 2. **wantsToRead 模型**：consumer 必须显式 `read()` 表示想读，否则 `sendItMaybe` 不投递
 3. **手动 consumeBytes**：在 `onDataRead0` 后调用 `decoder().flowController().consumeBytes(stream, consumed)`，主动告诉 Netty "我处理完了"
 4. **解决 Netty 默认流控的痛点**：Netty 默认严格按窗口投递，写大 body 时容易 deadlock；mu-server 自己的 buffer 解耦了"帧到达"和"消费"
-5. `Http2Connection extends Http2ConnectionFlowControl` 增加 `exchanges: ConcurrentHashMap<Integer, HttpExchange>`（每 stream 一个 exchange）
+5. `Http2Connection` 内部增加 `Map<Integer, HttpExchange> exchanges`（每 stream 一个 exchange）
 6. `onStreamError` 捕获 `HeaderListSizeException` → 431 Request Header Fields Too Large
 7. `onGoAwayRead` 关整条 connection；`onRstStreamRead` 取消单个 stream
 
@@ -507,7 +505,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 }
 ```
 
-**`ensureSet()` 在 `MuServerBuilder` 静态初始化时被调用**，注册 mu 自己的 JAX-RS RuntimeDelegate。这是 JDK JAX-RS SPI 机制：`RuntimeDelegate.setInstance()` 后所有 JAX-RS API 走 mu 的实现。
+**`ensureSet()` 在 mu-server `io.muserver.rest` 包多个类首次加载时被调用**（`RequestMatcher:27` / `NewCookieHeaderDelegate:12` / `MuUriInfo:22` / `MuUriBuilder:25` 都调了它），用于注册 mu 自己的 JAX-RS RuntimeDelegate。这是 JDK JAX-RS SPI 机制：`RuntimeDelegate.setInstance()` 后所有 JAX-RS API 走 mu 的实现。
 
 ### 5.2 子包内容（节选）
 
@@ -547,22 +545,19 @@ rest/
 
 ### 6.1 SSE — `SsePublisher.java` + `AsyncSsePublisher.java`
 
-`SsePublisher`（290 行）：
+`SsePublisher`（200 行 public interface）：
 ```java
-public class SsePublisher implements AsyncHandle {
-    private final MuResponse response;
-    private final ScheduledExecutorService scheduler;
-    private final long heartbeatIntervalMs;
-    private volatile SseState state = SseState.INITIAL;
-    private final ScheduledFuture<?> heartbeatTask;
-
-    public void send(String name, String data, String id, Duration retry) {
-        // 写 SSE 帧: "event: <name>\ndata: <data>\nid: <id>\nretry: <retry>\n\n"
-    }
+public interface SsePublisher {
+    void send(String message) throws IOException;                              // 无 event 类型
+    void send(String message, String event) throws IOException;                // 带 event 类型
+    void send(String message, String event, String eventID) throws IOException;// 带 event + id
+    void close();                                                              // 关闭流
+    void sendComment(String comment) throws IOException;                       // 注释帧（保活）
+    static SsePublisher start(MuRequest request, MuResponse response);         // 启动 SSE
 }
 ```
 
-**SSE 帧格式**：
+**SSE 帧格式**（举例 `event=message` / `id=42` / `retry=3000`）：
 ```
 event: message\n
 data: {"x": 1}\n
@@ -571,11 +566,13 @@ retry: 3000\n
 \n
 ```
 
+**注释帧（保活用）**：`sendComment(c)` → 写入 `":" + c + "\n\n"`（`SsePublisherImpl.commentText:192`）
+
 **两阶段生命周期**：
 - `SsePublisher`（同步调用）：handler 写完响应后由 `NettyHandlerAdapter` 接管
-- `AsyncSsePublisher`（异步）：handler 退出后 publisher 仍存活，由 `AsyncHandle.complete()` / `close()` 控制
+- `AsyncSsePublisher`（异步，193 行）：handler 退出后 publisher 仍存活，由 `AsyncHandle.complete()` / `close()` 控制
 
-**心跳机制**：默认每 15s 发一个注释帧（`: heartbeat\n\n`），防止代理服务器关闭 idle connection。
+**⚠️ 关于"自动心跳"**：源码里**没有自动定时心跳 scheduler**。`SsePublisher` / `AsyncSsePublisher` 都不持有 `ScheduledExecutorService` 或 `heartbeatIntervalMs` 字段。心跳保活需要用户自己用 `ScheduledExecutorService` 周期调 `sendComment(": keep-alive\n")`。注释帧格式：`: <comment>\n\n`（冒号开头是 SSE 规范的注释约定）。
 
 ### 6.2 TLS / HTTPS — `HttpsConfigBuilder.java` + 22 文件
 
@@ -678,16 +675,16 @@ public interface AsyncHandle {
 
 ## 7. Handler 库 (Built-in Handlers)
 
-`io.muserver.handlers.*` 包，~15 个文件。
+`io.muserver.handlers.*` 包，~14 个文件（实测 `ls` 列出 14 个 `.java`）。
 
 | Handler | 作用 |
 |---|---|
-| `CORSHandler` | 全局 CORS 策略：withAllowedOrigins / withAllowedMethods / withAllowedHeaders / withExposedHeaders / withMaxAge |
-| `CSRFProtectionHandler` | 双重提交 cookie 模式 CSRF 防护 |
-| `HttpsRedirector` | HTTP → HTTPS 自动重定向（可选 301 / 308） |
-| `ResourceHandler` | 静态文件服务（按 MIME / Range / cache headers） |
-| `BareDirectoryRequestAction` | 目录列表（ResourceHandler 子组件） |
-| `HealthCheckHandler` | `/health` endpoint |
+| `CORSHandler` + `CORSHandlerBuilder` | 全局 CORS 策略：withAllowedOrigins / withAllowedMethods / withAllowedHeaders / withExposedHeaders / withMaxAge |
+| `CSRFProtectionHandler` + `CSRFProtectionHandlerBuilder` | 双重提交 cookie 模式 CSRF 防护 |
+| `HttpsRedirector` + `HttpsRedirectorBuilder` | HTTP → HTTPS 自动重定向（可选 301 / 308） |
+| `ResourceHandler` + `ResourceHandlerBuilder` + `ResourceProvider` + `ResourceCustomizer` + `ResourceType` | 静态文件服务（按 MIME / Range / cache headers） |
+| `BareDirectoryRequestAction` + `DirectoryLister` | 目录列表（ResourceHandler 子组件） |
+| `BytesRange` | HTTP Range 请求解析工具 |
 
 **`ResourceHandler` 配置示例**：
 ```java
@@ -802,27 +799,29 @@ boolean stop(long duration, TimeUnit unit) {
 
 ## 10. 演化对比 (0.0.3 → 2.2.9 → 2.4.2)
 
-| 维度 | 0.0.3-SNAPSHOT | 2.2.9 | **2.4.2** |
+| 维度 | 0.0.3.6 | 2.2.9 | **2.4.2** |
 |---|---|---|---|
-| Java 文件数 | 258 | 259 | **248**（精简 -10）|
-| 总行数 | 36,317 | 30,755 | **31,840**（+1,085）|
-| Netty 版本 | 4.1.137.Final | 4.1.135.Final | **4.1.135.Final** |
-| JDK | - | - | **11** (source/target) |
+| Java 文件数 | 258 | 240 | **248**（比 2.2.9 +8）|
+| 总行数 | 36,317 | 30,755 | **31,840**（比 2.2.9 +1,085）|
+| Netty 版本（默认） | 4.1.137.Final | 4.1.135.Final | **4.1.137.Final** |
+| JDK (source/target) | 11 | 1.8 | **1.8** |
+| Commit | `4f0aa3c` | `086a921` "Update Netty version to 4.1.135.Final" | **`ae091538`** "Merge #206 colon-paths" |
 | 协议层 | HTTP/1 + HTTP/2 + 流控 + ALPN + HAProxy | 同 | **同**（无变化）|
 | 抽象层 | `NettyRequestAdapter` + `NettyResponseAdaptor` + `HttpExchange` + `MuRequest/Response` | 同 | **同**（API 微调）|
-| 分发层 | `NettyHandlerAdapter` + `MuServerBuilder` (34KB) | `MuServerBuilder` (~50KB) | **`MuServerBuilder` (835 行，最大单文件)** |
+| 分发层 | `NettyHandlerAdapter` + `MuServerBuilder` | `MuServerBuilder` | **`MuServerBuilder` (835 行，最大单文件)** |
 | 路由 | `Routes` + URI 模板 | 同 | **同**（稳定）|
 | JAX-RS | 手写 annotation scanner | 同 | **同**（成熟稳定）|
-| SSE | `SsePublisher` + `AsyncSsePublisher` | 同 | **同** |
-| TLS | `HttpsConfigBuilder` (22KB) | 同 | **同** |
+| SSE | `SsePublisher` + `AsyncSsePublisher` | 同 | **同**（**无自动心跳**，用户手动调 `sendComment`）|
+| TLS | `HttpsConfigBuilder` | 同 | **同** |
 | RateLimiter | 接口 + 内置实现 | 同 | **同** |
 | Async | `AsyncHandle` | 同 | **同** |
 | WebSocket | `ws/` 子包 | 同 | **同** |
 
 **核心观察**：
-- 架构骨架（6 层）在 0.0.3 就已成型，后续版本主要是 bug 修复 + 文档改进 + 边缘场景处理
-- 2.4.2 比 2.2.9 少 10 个文件但行数更多 → **模块合并 + 实现细节扩充**（比如 `HttpExchange` 加了更多边界条件处理）
+- 架构骨架（6 层）在 0.0.3.6 就已成型，后续版本主要是 bug 修复 + 文档改进 + 边缘场景处理
+- 2.4.2 比 2.2.9 多 8 个文件 + 1,085 行 → **新增功能 + 实现细节扩充**（含 `Http2Headers` / `Http2Response` / `Http2To1RequestAdapter` 等 HTTP/2 辅助类）
 - 协议层（HTTP/1, HTTP/2, 流控, ALPN）完全没变 → 这是 mu-server 的"稳定面"
+- **JDK 降级**：0.0.3.6 用了 JDK 11，2.2.9 / 2.4.2 回到 JDK 1.8（向后兼容性优先）
 
 ---
 
@@ -842,7 +841,7 @@ boolean stop(long duration, TimeUnit unit) {
 ✅ **适合**：
 - **微服务 / 小到中型 REST API**：启动快（亚秒）、资源占用低
 - **JAX-RS 标准 API**：自动 OpenAPI 文档、注解驱动
-- **SSE 长连接**：原生 publisher + 自动心跳
+- **SSE 长连接**：原生 publisher（无自动心跳，需自己 `ScheduledExecutorService` 周期调 `sendComment` 保活）
 - **HTTPS + Let's Encrypt 自动续签**：内置集成
 - **嵌入式 HTTP server**：作为 library 嵌入 Java 应用
 
@@ -867,28 +866,28 @@ boolean stop(long duration, TimeUnit unit) {
 | `io.muserver.MuStats` | 50 | 统计接口 |
 | `io.muserver.MuStatsImpl` | 110 | 统计实现 |
 | `io.muserver.NettyHandlerAdapter` | 98 | **核心调度器** |
-| `io.muserver.Http1Connection` | ~250 | HTTP/1.1 实现 |
-| `io.muserver.Http2Connection` | ~400 | HTTP/2 实现 |
-| `io.muserver.Http2ConnectionFlowControl` | ~250 | 自实现 HTTP/2 流控 |
+| `io.muserver.Http1Connection` | 309 | HTTP/1.1 实现 |
+| `io.muserver.Http2Connection` | **582** | HTTP/2 实现 + 自实现流控（合并在同一文件）|
+| ~~`io.muserver.Http2ConnectionFlowControl`~~ | — | **不存在独立文件**（流控做在 `Http2Connection` 内部）|
 | `io.muserver.HttpExchange` | 479 | 协调者 + block() |
 | `io.muserver.NettyRequestAdapter` | 549 | request Netty 包装 |
 | `io.muserver.NettyResponseAdaptor` | 367 | response Netty 包装 |
-| `io.muserver.AlpnHandler` | 80 | ALPN 协商 |
+| `io.muserver.AlpnHandler` | 46 | ALPN 协商 |
 | `io.muserver.HAProxyMessageHandler` | 20 | HAProxy 协议 |
 | `io.muserver.BackPressureHandler` | 72 | TCP 背压 |
 | `io.muserver.MuFlowControlHandler` | 225 | Netty FlowControl fork |
-| `io.muserver.Headers` | 400+ | header multi-map |
+| `io.muserver.Headers` | 412 | header multi-map |
 | `io.muserver.Cookie` | - | cookie 值对象 |
-| `io.muserver.ForwardedHeader` | 250+ | RFC 7239 |
-| `io.muserver.Routes` | - | URI 路由 |
+| `io.muserver.ForwardedHeader` | 281 | RFC 7239 |
+| `io.muserver.Routes` | 52 | URI 路由 |
 | `io.muserver.RouteHandler` | - | route 回调接口 |
 | `io.muserver.AsyncHandle` | - | 异步 API |
 | `io.muserver.handlers.CORSHandler` | - | 全局 CORS |
 | `io.muserver.handlers.CSRFProtectionHandler` | - | CSRF |
 | `io.muserver.handlers.HttpsRedirector` | - | HTTP→HTTPS |
 | `io.muserver.handlers.ResourceHandler` | - | 静态文件 |
-| `io.muserver.SsePublisher` | 290 | SSE 同步 |
-| `io.muserver.AsyncSsePublisher` | - | SSE 异步 |
+| `io.muserver.SsePublisher` | 200 | SSE 同步接口 |
+| `io.muserver.AsyncSsePublisher` | 193 | SSE 异步接口 |
 | `io.muserver.HttpsConfigBuilder` | - | TLS 配置 |
 | `io.muserver.ClientCertificateAuthentication` | - | 客户端证书 |
 | `io.muserver.RateLimiter` | - | 限流接口 |
