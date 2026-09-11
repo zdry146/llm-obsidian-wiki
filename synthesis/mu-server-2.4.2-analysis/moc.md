@@ -25,10 +25,11 @@ updated: 2026-09-12
 
 - **[[summary|综合报告主入口]]** — 元信息 + 执行摘要 + 13 章节导航
 
-## 13 个子页面
+## 14 个子页面（加 §0 背景补充）
 
 | § | 子页面 | 核心内容 |
 |---|---|---|
+| **§0** | **[[00-netty-vs-tomcat-background\|Netty 核心概念 & vs Tomcat 优势]]** | **背景补充：Netty EventLoop / ChannelPipeline / ByteBuf + Tomcat 线程模型对比 + 性能基准（3.18x）+ mu-server 为何选 Netty** |
 | §1 | [[01-architecture-overview\|整体架构 + 6 层架构图]] | 6 层叠加总览 + mermaid 图 |
 | §2 | [[02-protocol-layer\|协议层]] | HTTP/1+2 + ALPN + HAProxy + 背压 |
 | §3 | [[03-abstraction-layer\|抽象层]] | MuRequest/Response + Adapter + HttpExchange |

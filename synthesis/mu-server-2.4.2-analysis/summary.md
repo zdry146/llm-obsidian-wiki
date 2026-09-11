@@ -26,10 +26,11 @@ updated: 2026-09-12
 
 mu-server 是基于 Netty 的轻量级现代 Java Web 服务器。核心思路：**用 Netty 做传输层，在其上构建 Java Web 服务器"缺失的那一层抽象"** —— 从 Netty 的 `ByteBuf` / `ChannelHandlerContext` / `HttpRequest` 向上提供 `MuRequest` / `MuResponse` / fluent builder / JAX-RS / SSE 等 handler 友好的 API。
 
-## 章节导航（13 个子页面）
+## 章节导航（14 个子页面）
 
 | § | 子页面 | 核心内容 |
 |---|---|---|
+| **§0** | **[[00-netty-vs-tomcat-background\|Netty 核心概念 & vs Tomcat 优势]]** | **背景补充：Netty 4.x 核心概念 + Tomcat 线程模型对比 + 性能基准（3.18x）+ mu-server 为何选 Netty** |
 | §1 | [[01-architecture-overview\|整体架构 + 6 层架构图]] | 6 层叠加总览 + mermaid 图 |
 | §2 | [[02-protocol-layer\|协议层]] | HTTP/1+2 + ALPN + HAProxy + 背压 |
 | §3 | [[03-abstraction-layer\|抽象层]] | MuRequest/Response + Adapter + HttpExchange |
