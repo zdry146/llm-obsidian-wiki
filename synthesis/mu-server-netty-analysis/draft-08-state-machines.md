@@ -2,7 +2,7 @@
 title: "mu-server 状态机 (RequestState/ResponseState/HttpExchangeState)"
 category: synthesis
 tags: [java, mu-server, state-machine, observer-pattern]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "三套状态机: RequestState (HEADERS_RECEIVED → RECEIVING_BODY → COMPLETE/ERRORED), ResponseState (NOTHING → HEADERS_SENT → ...), HttpExchangeState (IN_PROGRESS/COMPLETE/ERRORED/UPGRADED), CopyOnWriteArrayList 监听器"
 provenance:
   extracted: 0.85

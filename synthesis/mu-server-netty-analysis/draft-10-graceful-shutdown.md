@@ -2,7 +2,7 @@
 title: "mu-server 优雅关停 (stop with grace period)"
 category: synthesis
 tags: [java, mu-server, lifecycle, graceful-shutdown]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "MuServer.stop(duration, unit) 等 in-flight 请求完成, 超时后强制 abort 连接, 通过 ConcurrentHashMap tracks 活动连接"
 provenance:
   extracted: 0.85
@@ -107,7 +107,7 @@ For HTTP/1 connections still open when the worker group shuts down:
 So even when the graceful timeout hits, in-flight requests get a clean
 `ResponseState.CLIENT_DISCONNECTED` notification.
 
-## 6. Limitations in this 0.0.3-SNAPSHOT
+## 6. Limitations in this mu-server-0.0.3.6
 
 * `gracefulWait` polls — no `CountDownLatch` per request to wake it immediately when the last
   exchange ends. At 100 ms granularity, shutdown may lag up to 100 ms even when there's nothing left

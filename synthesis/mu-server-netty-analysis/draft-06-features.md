@@ -2,7 +2,7 @@
 title: "mu-server 功能模块 (SSE/TLS/限流/统计/WebSocket)"
 category: synthesis
 tags: [java, mu-server, sse, tls, rate-limit, websocket, stats]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "SsePublisher/AsyncSsePublisher 长连接, HttpsConfigBuilder SSL/TLS 配置 + 证书热重载, RateLimiter, MuStatsImpl 统计, WebSocket 支持"
 provenance:
   extracted: 0.85

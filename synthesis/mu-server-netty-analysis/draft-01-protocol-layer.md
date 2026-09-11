@@ -2,7 +2,7 @@
 title: "mu-server 协议层 (HTTP/1.1, HTTP/2, ALPN, HAProxy, 背压)"
 category: synthesis
 tags: [java, netty, mu-server, protocol, http2, alpn, haproxy]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "mu-server 在 Netty 之上的协议层封装: HTTP/1.1 Http1Connection 继承 SimpleChannelInboundHandler, HTTP/2 Http2Connection 继承 Http2ConnectionHandler, ALPN 协议协商, HAProxy 协议解析, 自实现 BackPressureHandler"
 provenance:
   extracted: 0.85

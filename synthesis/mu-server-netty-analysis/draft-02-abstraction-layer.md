@@ -2,7 +2,7 @@
 title: "mu-server 抽象层 (Request/Response/HttpExchange)"
 category: synthesis
 tags: [java, netty, mu-server, abstraction, adapter-pattern]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "Netty NettyRequestAdapter/ResponseAdaptor 包装 Netty 底层 HttpRequest/ChannelFuture, 提供用户友好的 MuRequest/MuResponse API, HttpExchange 协调两件套 + 状态机"
 provenance:
   extracted: 0.85

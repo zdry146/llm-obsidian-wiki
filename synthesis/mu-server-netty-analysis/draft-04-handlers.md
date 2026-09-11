@@ -2,7 +2,7 @@
 title: "mu-server 内置 Handler 库 (CORS/CSRF/StaticResource/HttpRedirect)"
 category: synthesis
 tags: [java, mu-server, handlers, cors, csrf, static-resources]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "CORSHandler / CSRFProtectionHandler / HttpsRedirector / ResourceHandler (静态资源) / DirectoryLister 等开箱即用 handler"
 provenance:
   extracted: 0.85

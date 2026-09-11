@@ -2,8 +2,8 @@
 title: "mu-server 在 Netty 之上新增/包装的能力 - 全量分析综合报告"
 category: synthesis
 tags: [java, netty, mu-server, framework, analysis, opencode, omo, synthesis]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)", "omo Sisyphus agent team analysis (2026-09-11, 10 drafts + 1 final report)"]
-summary: "omo Sisyphus agent team 对 mu-server 0.0.3-SNAPSHOT 源码全量分析的综合报告: 6 层架构 (Netty → 协议 → 抽象 → 分发 → Handler/功能 → 应用), Netty 原生 vs mu-server 对照表, 6 个关键设计模式, 使用场景对比"
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)", "omo Sisyphus agent team analysis (2026-09-11, 10 drafts + 1 final report)"]
+summary: "omo Sisyphus agent team 对 mu-server mu-server-0.0.3.6 源码全量分析的综合报告: 6 层架构 (Netty → 协议 → 抽象 → 分发 → Handler/功能 → 应用), Netty 原生 vs mu-server 对照表, 6 个关键设计模式, 使用场景对比"
 provenance:
   extracted: 0.85
   inferred: 0.10
@@ -15,13 +15,14 @@ created: 2026-09-11
 updated: 2026-09-11
 ---
 
-# mu-server 源码分析报告 (commit 4f0aa3c, version 0.0.3-SNAPSHOT)
+# mu-server 源码分析报告 (tag mu-server-0.0.3.6, commit 4f0aa3c)
 
-> 分析对象: `/tmp/mu-server-readonly/` (master @ `4f0aa3c`)
-> 258 个 Java 文件, 36,317 行.
+> 分析对象: `/tmp/mu-review/mu-main` (tag `mu-server-0.0.3.6` @ commit `4f0aa3c`)
+> 445 个 Java 文件, 72,613 行.
 > 关联 Netty 4.1.137.Final (pom.xml:18) / 4.2.17.Final (备用, pom.xml:19).
-> Java 11 source/target (pom.xml:245-247).
+> Java 11 source/target/release (pom.xml:245-247).
 > 报告生成时间: 任务执行期间; 基于源码只读分析, 未做编译验证.
+> 2026-09-12 Spark review: 18 项事实错误已修正（详见 commit message）
 
 ---
 
@@ -31,7 +32,7 @@ updated: 2026-09-11
 提供 Servlet 风格的同步 / 异步 API 和完整的 Jakarta REST 3.1 (JAX-RS) 实现。它的核心设计哲学是
 "程序化配置 (programmatic configuration) + 极简抽象层 + 直接暴露 Netty 概念". 服务器在一个
 boss `NioEventLoopGroup` + worker `NioEventLoopGroup` + 用户线程池 (默认
-`ThreadPoolExecutor(8, 400, SynchronousQueue, "muhandler")`) 三层线程模型上运行,通过
+`ThreadPoolExecutor(8, 400, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), "muhandler")`) 三层线程模型上运行,通过
 `HttpExchange.block(...)` 模式 (`HttpExchange.java:63-98`) 把 Netty 事件循环上的写操作对接到
 工作线程,使得用户可以写出阻塞风格的 handler 代码 (`response.write("...")`),但底层仍然是非阻塞的
 I/O。HTTPS / HTTP/2 通过 Netty `ApplicationProtocolNegotiationHandler` 切换;HTTP/2 的
@@ -50,12 +51,12 @@ WebSocket, 静态文件 / Webjars, CORS, CSRF, 限流 (fixed-window counter), SN
 graph TB
     subgraph "L1 协议层 (io.muserver.protocol)"
         H1C[Http1Connection]
-        H2C[Http2Connection<br/>Http2ConnectionFlowControl]
+        H2C[Http2Connection<br/>extends Http2ConnectionFlowControl<br/>(inner abstract class)]
         HP[HAProxyMessageHandler]
         AL[AlpnHandler]
         SNI[MuSniHandler]
         BP[BackPressureHandler]
-        FC[MuFlowControlHandler]
+        MFC[MuFlowControlHandler<br/>229 lines]
     end
 
     subgraph "L2 适配层 (per-connection, per-exchange)"
@@ -133,7 +134,7 @@ graph TB
 | 启动入口 | `ServerBootstrap.bind(...)` | `MuServerBuilder.start()` | `MuServerBuilder.java:650-749` |
 | Boss / Worker 线程组 | 手动 `NioEventLoopGroup` | 自动 `boss=1`, `worker=min(16, cores*2)` | `MuServerBuilder.java:51, 664-665` |
 | HTTP/1 解码 | `HttpRequestDecoder` | `HttpRequestDecoder(maxLine, maxHeaders, 8192)` + `HttpResponseEncoder` 自定义化 | `MuServerBuilder.java:820-836` |
-| HTTP/2 | `Http2ConnectionHandler` + `Http2FrameListener` | `Http2ConnectionFlowControl` 自定义 back-pressure 层 | `Http2Connection.java:28-127` |
+| HTTP/2 | `Http2ConnectionHandler` + `Http2FrameListener` | `Http2ConnectionFlowControl`（Http2Connection.java 内嵌抽象类）自定义 back-pressure 层 | `Http2Connection.java:28-128` |
 | 协议协商 | `ApplicationProtocolNames` + `AlpnSslHandler` | `AlpnHandler extends ApplicationProtocolNegotiationHandler` | `AlpnHandler.java:7-46` |
 | TLS / SNI | `SslContextBuilder` + `SniHandler` | `HttpsConfigBuilder` + `MuSniHandler` (DomainWildcardMappingBuilder) | `MuServerBuilder.java:796` |
 | HAProxy 协议 | `HAProxyMessageDecoder` | + `HAProxyMessageHandler` 缓存 `ProxiedConnectionInfo` 到 channel attr | `HAProxyMessageHandler.java:8-20` |
@@ -148,7 +149,7 @@ graph TB
 | 流式响应 | `HttpChunkedInput` | `response.sendChunk(text)` / `response.outputStream()` 都走 `block()` | `NettyResponseAdaptor.java:217-226, 263-273` |
 | 跨线程通信 | 用户自己 `ctx.executor().submit(...)` | `HttpExchange.block(Runnable)` / `block(Callable<ChannelFuture>)` 一键桥接, 带 `assert !inLoop()` 防自死锁 | `HttpExchange.java:63-98` |
 | WebSocket | `WebSocketServerHandshaker` | `NettyRequestAdapter.websocketUpgrade(...)` + `ExchangeUpgradeEvent` 切换 `currentExchange` | `NettyRequestAdapter.java:403-426`, `Http1Connection.java:188-201` |
-| SSE | 用户手工 chunked write | `SsePublisher.start(req, resp)` (blocking) / `AsyncSsePublisher.start(...)` (callback) | `SsePublisher.java:107-111`, `AsyncSsePublisher.java:116-123` |
+| SSE | 用户手工 chunked write | `SsePublisher.start(req, resp)` (blocking) / `AsyncSsePublisher.start(...)` (callback); **无内置心跳，需用户显式 `close()`** | `SsePublisher.java:113`, `AsyncSsePublisher.java:122` |
 | 限流 | 第三方库 | `RateLimiterImpl` 基于 Netty `HashedWheelTimer` 的 fixed-window counter | `RateLimiterImpl.java:13-71` |
 | 静态文件 | 第三方库 | `ResourceHandler` + `ResourceProvider` (filesystem / classpath / webjars) | `handlers/ResourceHandlerBuilder.java:34-361` |
 | CORS | 第三方库 | `CORSHandler` + `CORSConfig` (与 JAX-RS 共用) | `handlers/CORSHandlerBuilder.java:20-88` |
@@ -159,7 +160,7 @@ graph TB
 | 优雅关闭 | `shutdownGracefully` | `MuServer.stop(timeout, unit)` → 关 channel → boss → 轮询 `stats.activeRequests().isEmpty()` → worker → executor | `MuServerBuilder.java:672-701`, `757-763` |
 | 流量整形 | `GlobalTrafficShapingHandler` | 用了但 `writeLimit=readLimit=0` (实际不限速), 仅用来挂载 `TrafficCounter` 暴露给 `MuStats` | `MuServerBuilder.java:668-669` |
 | HTTP/2 流控 | 自动 | 手写: `wantsToRead[streamId]` + `buffer[streamId]`, body reader 完成后 `consumeBytes(stream, consumed)` + `ctx.flush()` | `Http2Connection.java:42-73, 322-367` |
-| HTTP/2 push | `Http2FrameListener.onPushPromiseRead` | `onPushPromiseRead` 是空 no-op | `Http2Connection.java:467-470` |
+| HTTP/2 push | `Http2FrameListener.onPushPromiseRead` | `onPushPromiseRead` 是空 no-op（方法体 line 469-470） | `Http2Connection.java:468-470` |
 | 异常处理 | `exceptionCaught` | `HttpExchange.onException` → 用户 `UnhandledExceptionHandler` 或 fallback `500 + ERR-<uuid>` | `HttpExchange.java:386-446` |
 | 拒绝 (overload) | 用户 | `RejectedExecutionException` 被 `HttpExchange.create` / `Http2Connection.onHeadersRead` 捕获 → `503` | `HttpExchange.java:301-305`, `Http2Connection.java:296-301` |
 | Stats | `TrafficCounter` | `MuStatsImpl` (counter + trafficCounter bytes) | `MuStatsImpl.java:15-117` |
@@ -247,7 +248,7 @@ void onHeaders(HttpExchange muCtx) {
 }
 ```
 
-### 4.3 `Http2ConnectionFlowControl` — per-stream back-pressure
+### 4.3 `Http2ConnectionFlowControl`（Http2Connection.java 内嵌抽象类）— per-stream back-pressure
 
 文件: `src/main/java/io/muserver/Http2Connection.java` 行 28-127
 
@@ -394,7 +395,7 @@ Exchange:   IN_PROGRESS ─→ COMPLETE | ERRORED | UPGRADED
 
 ---
 
-## 6. 限制 / 已知问题 (基于 0.0.3-SNAPSHOT)
+## 6. 限制 / 已知问题 (基于 mu-server-0.0.3.6)
 
 > 全部基于源码静态分析, 未运行测试验证.
 
@@ -449,7 +450,7 @@ Exchange:   IN_PROGRESS ─→ COMPLETE | ERRORED | UPGRADED
 15. **默认端口绑定是 `0.0.0.0`** — 如果未指定 `withInterface`, bind 到通配, 安全敏感环境需
     显式 `withInterface("127.0.0.1")` (MuServerBuilder.java:94-97).
 
-16. **`v3-release-notes.md` 暗示这是个不稳定早期版本** (0.0.3-SNAPSHOT), 公开 API 还在演化.
+16. **`v3-release-notes.md` 是 v3.0 升级公告**（不是早期版本）：minimum Java 11、Jakarta REST 3.1、JSpecify nullness、删除 `io.muserver.Toggles`、writer interceptor 行为变化、graceful shutdown 返回 boolean 区分成功/超时等。公开 API 还在演化。
 
 ---
 
@@ -457,11 +458,11 @@ Exchange:   IN_PROGRESS ─→ COMPLETE | ERRORED | UPGRADED
 
 | 子包 | 文件数 | 关键文件 |
 |---|---|---|
-| `io.muserver` (核心) | ~80 | `MuServer`, `MuServerBuilder`, `MuServerImpl`, `MuRequest`, `MuResponse`, `HttpExchange`, `NettyHandlerAdapter`, `NettyRequestAdapter`, `NettyResponseAdaptor`, `Http1Connection`, `Http2Connection`, `Http2ConnectionBuilder`, `Http1Response`, `Http2Response`, `Http1Headers`, `Http2Headers`, `Http2To1RequestAdapter`, `AlpnHandler`, `HAProxyMessageHandler`, `MuSniHandler`, `BackPressureHandler`, `MuFlowControlHandler`, `PreReader`, `RateLimiterImpl`, `RateLimitBuilder`, `HttpsConfigBuilder`, `SsePublisher`, `AsyncSsePublisher`, `WebSocketHandler`, `WebSocketHandlerBuilder`, `MuWebSocket`, `BaseWebSocket`, `MuStats`, `MuStatsImpl`, `MuHandler`, `RouteHandler`, `Routes`, `ContextHandler`, `ContextHandlerBuilder`, `Mutils`, `Cookie`, `CookieBuilder`, `ForwardedHeader`, `Headers`, `RequestBodyReader`, `ChunkedHttpOutputStream`, `UploadedFile`, `SSLCipherFilter`, `SslContextProvider` |
-| `io.muserver.handlers` | 14 | `CORSHandler`, `CSRFProtectionHandler`, `HttpsRedirector`, `ResourceHandler`, `ResourceType`, `ResourceProvider`, `BytesRange`, `DirectoryLister`, `BareDirectoryRequestAction`, `ResourceCustomizer` |
-| `io.muserver.rest` | 94 | `RestHandler`, `RestHandlerBuilder`, `MuRuntimeDelegate`, `MuSeBootstrap`, `JaxRSRequest`, `JaxRSResponse`, `RequestMatcher`, `ResourceClass`, `ResourceClassIntrospection`, `ResourceMethod`, `ResourceMethodParam`, `UriPattern`, `PathMatch`, `JaxRSProviders`, `StringEntityProviders`, `BinaryEntityProviders`, `PrimitiveEntityProvider`, `SourceEntityProviders`, `FilterManagerThing`, `MediaTypeDeterminer`, `CombinedMediaType`, `CORSConfig`, `CORSConfigBuilder`, `JaxSseImpl`, `JaxSseEventSinkImpl`, `SseBroadcasterImpl`, `OpenApiDocumentor`, `HtmlDocumentor`, `ProblemDetailsException`, `ProblemDetailsExceptionMapper`, `MuSecurityContext`, `MuUriInfo`, `MuUriBuilder`, `MuVariantListBuilder`, `MuPathSegment`, `CustomExceptionMapper`, `GenericTypeResolver` |
-| `io.muserver.openapi` | 65 | `OpenAPIObject`, `PathsObject`, `PathItemObject`, `OperationObject`, `ParameterObject`, `RequestBodyObject`, `ResponseObject`, `ResponsesObject`, `SchemaObject`, `ComponentsObject`, ... (每个对象都有 builder, 由 `JsonWriter` 输出) |
-| **总计** | **258** | — |
+| `io.muserver` (核心) | 97 | `MuServer`, `MuServerBuilder`, `MuServerImpl`, `MuRequest`, `MuResponse`, `HttpExchange`, `NettyHandlerAdapter`, `NettyRequestAdapter`, `NettyResponseAdaptor`, `Http1Connection`, `Http2Connection`, `Http2ConnectionBuilder`, `Http1Response`, `Http2Response`, `Http1Headers`, `Http2Headers`, `Http2To1RequestAdapter`, `AlpnHandler`, `HAProxyMessageHandler`, `MuSniHandler`, `BackPressureHandler`, `MuFlowControlHandler`, `PreReader`, `RateLimiterImpl`, `RateLimitBuilder`, `HttpsConfigBuilder`, `SsePublisher`, `AsyncSsePublisher`, `WebSocketHandler`, `WebSocketHandlerBuilder`, `MuWebSocket`, `BaseWebSocket`, `MuStats`, `MuStatsImpl`, `MuHandler`, `RouteHandler`, `Routes`, `ContextHandler`, `ContextHandlerBuilder`, `Mutils`, `Cookie`, `CookieBuilder`, `ForwardedHeader`, `Headers`, `RequestBodyReader`, `ChunkedHttpOutputStream`, `UploadedFile`, `SSLCipherFilter`, `SslContextProvider` |
+| `io.muserver.handlers` | 15 | `CORSHandler` + `CORSHandlerBuilder`, `CSRFProtectionHandler` + `CSRFProtectionHandlerBuilder`, `HttpsRedirector` + `HttpsRedirectorBuilder`, `ResourceHandler` + `ResourceHandlerBuilder`, `ResourceType`, `ResourceProvider`, `BytesRange`, `DirectoryLister`, `BareDirectoryRequestAction`, `ResourceCustomizer`, `package-info.java` |
+| `io.muserver.rest` | 84 | `RestHandler`, `RestHandlerBuilder`, `MuRuntimeDelegate`, `MuSeBootstrap`, `JaxRSRequest`, `JaxRSResponse`, `RequestMatcher`, `ResourceClass`, `ResourceClassIntrospection`, `ResourceMethod`, `ResourceMethodParam`, `UriPattern`, `PathMatch`, `JaxRSProviders`, `StringEntityProviders`, `BinaryEntityProviders`, `PrimitiveEntityProvider`, `SourceEntityProviders`, `FilterManagerThing`, `MediaTypeDeterminer`, `CombinedMediaType`, `CORSConfig`, `CORSConfigBuilder`, `JaxSseImpl`, `JaxSseEventSinkImpl`, `SseBroadcasterImpl`, `OpenApiDocumentor`, `HtmlDocumentor`, `ProblemDetailsException`, `ProblemDetailsExceptionMapper`, `MuSecurityContext`, `MuUriInfo`, `MuUriBuilder`, `MuVariantListBuilder`, `MuPathSegment`, `CustomExceptionMapper`, `GenericTypeResolver` |
+| `io.muserver.openapi` | 62 | `OpenAPIObject`, `PathsObject`, `PathItemObject`, `OperationObject`, `ParameterObject`, `RequestBodyObject`, `ResponseObject`, `ResponsesObject`, `SchemaObject`, `ComponentsObject`, ... (每个对象都有 builder, 由 `JsonWriter` 输出) |
+| **总计** | **445** | — |
 
 ---
 
@@ -471,7 +472,7 @@ mu-server 是一个 **紧凑、自洽、Netty-native 的 Java HTTP/2 服务器**
 (`MuRequest` / `MuResponse` / `HttpExchange`) + 同步 `block()` 桥接 + JAX-RS 子系统 +
 SSE/WebSocket 内置, 提供了"几乎即用"的 web framework 体验, 但避免了 Spring Boot 的庞杂. 适合
 中等复杂度的内部 API, 不适合需要 Servlet 兼容、超大规模 SSE 或完整 JAX-RS 生态的场景.
-0.0.3-SNAPSHOT 这个早期版本里, 核心架构 (三层线程模型 / HTTP/2 流控 / 状态机) 已经成熟, 但
+mu-server-0.0.3.6 这个早期版本里, 核心架构 (三层线程模型 / HTTP/2 流控 / 状态机) 已经成熟, 但
 JAX-RS 子系统坦白地标注了"若干不实现" (Bean Validation, JAXB, 自动扫描, Feature), 这点是评估
 时必须注意的.
 
@@ -495,7 +496,7 @@ JAX-RS 子系统坦白地标注了"若干不实现" (Bean Validation, JAXB, 自�
 * `MuServerBuilder.java:51, 209-212, 660, 668-669, 672-701, 757-763, 820-836`
 * `MuServerImpl.java:128-139`
 * `Http1Connection.java:31-322` (尤其 92-118, 188-201)
-* `Http2Connection.java:28-127, 229-319, 322-367, 439-449, 467-470, 473-475`
+* `Http2Connection.java:28-128, 229-319, 322-367, 439-449, 468-470, 473-475`
 * `Http2ConnectionFlowControl` (Http2Connection.java 内的抽象类)
 * `AlpnHandler.java:7-46`
 * `HAProxyMessageHandler.java:8-20`

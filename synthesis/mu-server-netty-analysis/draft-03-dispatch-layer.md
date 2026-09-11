@@ -2,8 +2,8 @@
 title: "mu-server 分发层 (NettyHandlerAdapter + MuServerBuilder + 路由)"
 category: synthesis
 tags: [java, mu-server, dispatch, builder-pattern, routing]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
-summary: "核心调度器 NettyHandlerAdapter 在独立 ExecutorService 跑 user handler, MuServerBuilder fluent API (34KB), 路由系统 PathMatch/Matcher"
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+summary: "核心调度器 NettyHandlerAdapter 在独立 ExecutorService 跑 user handler, MuServerBuilder fluent API (864 行, 34.7 KB), 路由系统 PathMatch/Matcher"
 provenance:
   extracted: 0.85
   inferred: 0.10

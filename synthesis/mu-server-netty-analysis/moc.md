@@ -2,7 +2,7 @@
 title: "mu-server Netty 全量分析 - MOC (Map of Content)"
 category: synthesis
 tags: [java, netty, mu-server, framework, analysis, opencode, omo, moc, index]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "mu-server 在 Netty 之上新增/包装的能力 - 全量分析的入口和导航"
 provenance:
   extracted: 0.85
@@ -17,7 +17,7 @@ updated: 2026-09-11
 
 # mu-server Netty 全量分析 - Map of Content
 
-> 本目录是 omo Sisyphus agent team 对 mu-server 0.0.3-SNAPSHOT 源码的全量分析产出 (258 Java 文件 / 36317 行)。
+> 本目录是 omo Sisyphus agent team 对 mu-server mu-server-0.0.3.6 源码的全量分析产出 (445 Java 文件 / 72613 行)。
 
 ## 主入口
 - **[[summary|综合报告]]** — mu-server 在 Netty 之上新增/包装了什么 (执行摘要 + 架构图 + 对照表 + 关键代码 + 使用场景)
@@ -38,8 +38,8 @@ updated: 2026-09-11
 `#java` `#netty` `#mu-server` `#framework` `#opencode` `#omo` `#analysis`
 
 ## 元信息
-- **代码版本**: mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (master 分支)
+- **代码版本**: mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (master 分支)
 - **分析时间**: 2026-09-11 01:00-01:14
 - **执行者**: omo Sisyphus agent team (single ultraworker session, ~14 分钟)
-- **总代码量**: 258 Java 文件 / 36317 行
+- **总代码量**: 445 Java 文件 / 72613 行
 - **分析产出**: 1096 行 draft + 504 行 final report = 1600 行 markdown

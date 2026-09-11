@@ -2,7 +2,7 @@
 title: "mu-server 【关键】线程模型 (event loop + executor + block())"
 category: synthesis
 tags: [java, netty, mu-server, threading, async, concurrency]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "mu-server 最重要的发明: Netty event loop 只负责拆消息, user handler 在独立 ExecutorService 跑, 通过 HttpExchange.block() 跨线程同步回写响应"
 provenance:
   extracted: 0.85

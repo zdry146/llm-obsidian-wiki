@@ -2,7 +2,7 @@
 title: "mu-server JAX-RS 3.0 支持"
 category: synthesis
 tags: [java, mu-server, jax-rs, rest, annotations]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "内置 jakarta.ws.rs 注解支持 (@Path/@GET/@POST), MuRuntimeDelegate 入口, ResourceBuilder 路由, UriInfo 参数绑定, Filters/Interceptors, EntityProviders"
 provenance:
   extracted: 0.85
@@ -17,7 +17,7 @@ updated: 2026-09-11
 
 # Draft 05 — JAX-RS Layer (`io.muserver.rest`)
 
-> ~94 files, the largest single subsystem. Maps Jakarta REST 3.1 onto the mu-server primitives.
+> 84 files, the largest single subsystem. Maps Jakarta REST 3.1 onto the mu-server primitives.
 
 ## 1. Entry point — `RestHandler implements MuHandler`
 

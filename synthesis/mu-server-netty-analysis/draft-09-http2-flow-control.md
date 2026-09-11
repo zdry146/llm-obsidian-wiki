@@ -2,7 +2,7 @@
 title: "mu-server HTTP/2 自定义流控"
 category: synthesis
 tags: [java, netty, mu-server, http2, flow-control, back-pressure]
-sources: ["mu-server 0.0.3-SNAPSHOT @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
+sources: ["mu-server mu-server-0.0.3.6 @ commit 4f0aa3c (https://github.com/3redronin/mu-server)"]
 summary: "Http2ConnectionFlowControl 自实现 buffer (Map<Integer, Queue<DataReadData>>) + wantsToRead, 解决 Netty 默认流控写大 body 卡住的问题, 手动 consumeBytes"
 provenance:
   extracted: 0.85
@@ -166,7 +166,7 @@ httpExchange.onMessage(ctx, msg, error -> {
   which propagates through `NettyRequestAdapter.onCancelled` (line 394-401) and
   `NettyResponseAdaptor.onCancelled` (line 103-107), eventually closing the exchange.
 
-## 7. Limitations in this 0.0.3-SNAPSHOT
+## 7. Limitations in this mu-server-0.0.3.6
 
 * No `WindowUpdateRequest` handling for individual streams is exposed to user code (line 478-479 is
   empty).
