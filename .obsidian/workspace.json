@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "concepts/jcl-spooling-sysout.md",
-                "mode": "source",
+                "file": "synthesis/okhttp-analysis/draft-05-cache.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "jcl-spooling-sysout"
+              "title": "draft-05-cache"
             }
           }
         ]
@@ -41,7 +41,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "文件列表"
@@ -78,7 +80,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 278.5
+    "width": 306.6328125
   },
   "right": {
     "id": "df567f94e04f3dde",
@@ -185,34 +187,37 @@
   },
   "active": "3261c691251ef05d",
   "lastOpenFiles": [
-    "concepts/db2-12-security.md",
-    "concepts/websphere-mq-configuration.md",
-    "concepts/websphere-mq-integration.md",
-    "concepts/websphere-mq-programming.md",
-    "concepts/websphere-mq-messages.md",
-    "concepts/websphere-mq-core-concepts.md",
-    "concepts/websphere-mq-objects.md",
-    "concepts/messaging-middleware.md",
-    "references/websphere-mq-primer.md",
+    "synthesis/okhttp-analysis/draft-04-http2.md",
+    "synthesis/grpc-analysis/draft-11-known-issues.md",
+    "synthesis/grpc-analysis/draft-12-comparison.md",
+    "synthesis/grpc-analysis/draft-10-best-practices.md",
+    "synthesis/grpc-analysis/draft-06-streaming.md",
+    "synthesis/grpc-analysis/draft-08-load-balancing.md",
+    "synthesis/grpc-analysis/draft-07-interceptors.md",
+    "synthesis/grpc-analysis/draft-09-error-handling.md",
+    "synthesis/grpc-analysis/draft-04-client-side.md",
+    "synthesis/grpc-analysis/draft-05-server-side.md",
+    "synthesis/grpc-analysis/draft-03-service-definition.md",
+    "synthesis/grpc-analysis/draft-02-wire-protocol.md",
+    "synthesis/grpc-analysis/draft-00-background.md",
+    "synthesis/grpc-analysis/draft-01-architecture.md",
+    "synthesis/grpc-analysis/moc.md",
+    "synthesis/grpc-analysis/summary.md",
+    "synthesis/grpc-analysis",
+    "synthesis/okhttp-analysis/draft-05-cache.md",
+    "synthesis/okhttp-analysis/draft-06-websocket.md",
+    "synthesis/okhttp-analysis/draft-07-sync-async.md",
+    "synthesis/okhttp-analysis/draft-08-okio.md",
+    "synthesis/okhttp-analysis/draft-09-evolution.md",
+    "synthesis/okhttp-analysis/draft-10-known-issues.md",
+    "synthesis/okhttp-analysis/draft-11-comparison.md",
+    "synthesis/okhttp-analysis/draft-03-connection-pool.md",
+    "synthesis/okhttp-analysis/draft-02-interceptors.md",
+    "synthesis/okhttp-analysis/draft-01-architecture.md",
+    "synthesis/okhttp-analysis",
+    "synthesis/mu-server-2.4.2-analysis/01-architecture-overview.png",
     "ibm mq.pdf",
-    "concepts/jcl-sdsf-output.md",
-    "concepts/jcl-utilities.md",
-    "concepts/jcl-storage-resources.md",
-    "concepts/jcl-procedures-instream.md",
-    "concepts/jcl-restart-checkpoint.md",
-    "concepts/jcl-scheduling-timing.md",
-    "concepts/jcl-spooling-sysout.md",
-    "concepts/jcl-conditional-execution.md",
-    "concepts/jcl-data-set-disposition.md",
-    "concepts/jcl-introduction.md",
-    "concepts/jcl-job-proc-step.md",
-    "references/zos-jcl-user-guide.md",
     "jcl user guide.pdf",
-    "concepts/zos-data-sets.md",
-    "concepts/zos-jcl-basics.md",
-    "concepts/zos-batch-processing.md",
-    "concepts/mainframe-roles-workloads.md",
-    "concepts/zos-application-development.md",
     "zOS Basics.pdf",
     "CICS.pdf",
     "synthesis",

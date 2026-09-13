@@ -1,8 +1,8 @@
 {
   "version": 1,
   "stats": {
-    "total_sources_ingested": 5,
-    "total_pages": 57
+    "total_sources_ingested": 8,
+    "total_pages": 87
   },
   "sources": [
     {
@@ -113,6 +113,70 @@
         "concepts/websphere-mq-programming.md",
         "concepts/websphere-mq-configuration.md",
         "concepts/websphere-mq-integration.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-09-12T11:43:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-09-12T22:40:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "live-analysis",
+      "project": "synthesis/okhttp-analysis",
+      "sources": [
+        "OkHttp 4.12.0 @ GitHub (https://github.com/square/okhttp)",
+        "OkHttp 5.0.0-alpha.14 (Kotlin coroutines)",
+        "Okio 3.6.0 (https://github.com/square/okio)",
+        "作者 Jenkins pipeline 实战踩坑 (2026-06-27)"
+      ],
+      "pages_created": [
+        "synthesis/okhttp-analysis/moc.md",
+        "synthesis/okhttp-analysis/summary.md",
+        "synthesis/okhttp-analysis/draft-00-background.md",
+        "synthesis/okhttp-analysis/draft-01-architecture.md",
+        "synthesis/okhttp-analysis/draft-02-interceptors.md",
+        "synthesis/okhttp-analysis/draft-03-connection-pool.md",
+        "synthesis/okhttp-analysis/draft-04-http2.md",
+        "synthesis/okhttp-analysis/draft-05-cache.md",
+        "synthesis/okhttp-analysis/draft-06-websocket.md",
+        "synthesis/okhttp-analysis/draft-07-sync-async.md",
+        "synthesis/okhttp-analysis/draft-08-okio.md",
+        "synthesis/okhttp-analysis/draft-09-evolution.md",
+        "synthesis/okhttp-analysis/draft-10-known-issues.md",
+        "synthesis/okhttp-analysis/draft-11-comparison.md",
+        "synthesis/okhttp-analysis/draft-12-use-cases.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-09-13T00:19:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-09-13T00:55:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "live-analysis",
+      "project": "synthesis/grpc-analysis",
+      "sources": [
+        "gRPC 1.66+ @ grpc/grpc-java (https://github.com/grpc/grpc-java)",
+        "gRPC Core Spec (PROTOCOL-HTTP2.md)",
+        "Protobuf v3 (https://protobuf.dev/)",
+        "CNCF gRPC (https://www.cncf.io/projects/grpc/)"
+      ],
+      "pages_created": [
+        "synthesis/grpc-analysis/moc.md",
+        "synthesis/grpc-analysis/summary.md",
+        "synthesis/grpc-analysis/draft-00-background.md",
+        "synthesis/grpc-analysis/draft-01-architecture.md",
+        "synthesis/grpc-analysis/draft-02-wire-protocol.md",
+        "synthesis/grpc-analysis/draft-03-service-definition.md",
+        "synthesis/grpc-analysis/draft-04-client-side.md",
+        "synthesis/grpc-analysis/draft-05-server-side.md",
+        "synthesis/grpc-analysis/draft-06-streaming.md",
+        "synthesis/grpc-analysis/draft-07-interceptors.md",
+        "synthesis/grpc-analysis/draft-08-load-balancing.md",
+        "synthesis/grpc-analysis/draft-09-error-handling.md",
+        "synthesis/grpc-analysis/draft-10-best-practices.md",
+        "synthesis/grpc-analysis/draft-11-known-issues.md",
+        "synthesis/grpc-analysis/draft-12-comparison.md"
       ],
       "pages_updated": []
     }
