@@ -1,8 +1,8 @@
 {
   "version": 1,
   "stats": {
-    "total_sources_ingested": 8,
-    "total_pages": 87
+    "total_sources_ingested": 9,
+    "total_pages": 102
   },
   "sources": [
     {
@@ -177,6 +177,38 @@
         "synthesis/grpc-analysis/draft-10-best-practices.md",
         "synthesis/grpc-analysis/draft-11-known-issues.md",
         "synthesis/grpc-analysis/draft-12-comparison.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-09-13T11:35:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-09-13T12:30:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "live-analysis",
+      "project": "synthesis/kotlin-analysis",
+      "sources": [
+        "Kotlin 2.0+ @ JetBrains (https://kotlinlang.org/)",
+        "Kotlin in Action (Dmitry Jemerov / Svetlana Isakova)",
+        "JetBrains Blog - Kotlin Evolution",
+        "Kotlin Coroutines Guide"
+      ],
+      "pages_created": [
+        "synthesis/kotlin-analysis/moc.md",
+        "synthesis/kotlin-analysis/summary.md",
+        "synthesis/kotlin-analysis/draft-00-background.md",
+        "synthesis/kotlin-analysis/draft-01-syntax-core.md",
+        "synthesis/kotlin-analysis/draft-02-functions.md",
+        "synthesis/kotlin-analysis/draft-03-coroutines.md",
+        "synthesis/kotlin-analysis/draft-04-dsl-builders.md",
+        "synthesis/kotlin-analysis/draft-05-collections.md",
+        "synthesis/kotlin-analysis/draft-06-oop.md",
+        "synthesis/kotlin-analysis/draft-07-kmp.md",
+        "synthesis/kotlin-analysis/draft-08-java-interop.md",
+        "synthesis/kotlin-analysis/draft-09-best-practices.md",
+        "synthesis/kotlin-analysis/draft-10-pitfalls.md",
+        "synthesis/kotlin-analysis/draft-11-comparison.md",
+        "synthesis/kotlin-analysis/draft-12-use-cases.md"
       ],
       "pages_updated": []
     }

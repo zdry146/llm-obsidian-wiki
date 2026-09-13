@@ -7,6 +7,7 @@
 - [[mu-server-2.4.2-analysis/summary]] - mu-server 2.4.2 在 Netty 之上新增/包装的能力全量分析（ #java #netty #mu-server #2.4.2 #opencode #omo）
 - [[okhttp-analysis/summary]] - OkHttp 4.12+ 全量分析：拦截器链、连接池、HTTP/2、缓存、Okio、亲历 Jenkins+SonarQube 401 bug 复盘（ #java #okhttp #http-client #square #4.12）
 - [[grpc-analysis/summary]] - gRPC 1.66+ 全量分析：HTTP/2 + Protobuf + 4 流式 + 拦截器 + xDS 负载均衡 + gRPC↔Netty↔mu-server 6 维对比（ #grpc #protobuf #rpc #http2 #netty #cncf #1.66）
+- [[kotlin-analysis/summary]] - Kotlin 2.0+ 全量分析：null 安全/协程/KMP/DSL + 与 Java/Scala/Groovy/C# 对比 + 在 OkHttp/gRPC/mu-server 生态中的角色（ #kotlin #jvm #coroutines #kmp #jetbrains #2.0）
 
 ## Concepts
 - [[continuous-delivery]] — DB2 12连续交付与函数级别管理（ #db2 #zos)

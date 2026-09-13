@@ -3,6 +3,7 @@ title: Hot Cache
 updated: 2026-09-12
 ---
 ## Recent Activity
+- **Live analysis: Kotlin 2.0+ 全量分析** — 新增 15 个页面（synthesis/kotlin-analysis/，含 moc + summary + 13 drafts），覆盖 null 安全/协程/DSL/KMP/集合/OOP/Java 互操作/最佳实践/坑/对比/在 OkHttp/gRPC/mu-server 生态中的角色（draft-12）。
 - **Live analysis: gRPC 1.66+ 全量分析** — 新增 15 个页面（synthesis/grpc-analysis/，含 moc + summary + 13 drafts），覆盖架构/线协议/服务定义/客户端/服务端/4 流式/拦截器/负载均衡/错误处理/最佳实践/坑/与 Netty+mu-server+REST+GraphQL 全方位对比（draft-12）。
 - **Cross-linker: OkHttp ↔ mu-server** — 新增 7 条 wikilinks 跨 5 个页面（draft-00/06/11/12/summary），OkHttp 与 mu-server-2.4.2-analysis 形成 HTTP 出/入站对称引用；summary §6 加 3 个 mu-server 版本对照 + draft-08 已有 Netty 对照补充。
 - **Live analysis: OkHttp 4.12+ 全量分析** — 新增 15 个页面（synthesis/okhttp-analysis/，含 moc + summary + 12 drafts + 1 资源所有权速查表），覆盖背景/架构/拦截器链/连接池/HTTP/2/缓存/WebSocket/同步异步/Okio/版本演进/亲历 Jenkins+SonarQube 401 bug 复盘/对比选型/适用场景。draft-02-interceptors 重构为 try/catch/finally 规范（鉴权/日志/重试/追踪 4 个实战拦截器均修复资源所有权问题）。
@@ -13,7 +14,7 @@ updated: 2026-09-12
 - Ingested IBM Redbooks SG24-8383-00: DB2 12 for z/OS Technical Overview — 扩展至12个DB2 12 wiki页面。
 
 ## Active Threads
-- **JVM 网络生态完整建立**：OkHttp（出站 HTTP 客户端）+ mu-server（入站 HTTP 服务端）+ gRPC（RPC 中间层，跨语言 + 流式）三方对照完成，Netty 作为共同底层被明确识别。下一步可挖 Ktor Client、Spring Cloud OpenFeign、Connect 协议
+- **JVM 网络 + 语言生态完整建立**：OkHttp + mu-server + gRPC + Kotlin 四方对照完成，Kotlin 是 OkHttp 4.x+/grpc-kotlin/netlib-common 的实现语言。下一步可挖 Ktor Client、Spring Cloud OpenFeign、Connect 协议、Compose Multiplatform
 - MQ/MOM知识体系建立：从消息中间件基础到WebSphere MQ配置编程，补充与CICS和z/OS的集成
 - z/OS知识体系建立：从硬件到软件，从batch到OLTP，覆盖mainframe完整技术栈
 - JCL知识体系完善：从基础到高级特性（条件执行、检查点重启、调度、实用程序）
