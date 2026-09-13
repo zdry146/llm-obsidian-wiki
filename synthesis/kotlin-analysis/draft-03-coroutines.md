@@ -437,6 +437,264 @@ suspend fun fetchAllData(): DashboardData = coroutineScope {
     )
     // 3 个请求并行，总时间 = max(单个时间)
 }
+
+### 14.4 长轮询（指数退避）
+
+```kotlin
+suspend fun longPoll(
+    initialDelay: Long = 1_000,
+    maxDelay: Long = 30_000
+): Update = coroutineScope {
+    var delayMs = initialDelay
+    while (isActive) {                          // 协程取消时自动跳出
+        try {
+            val update = api.fetchUpdate()       // 阻塞型调用
+            delayMs = initialDelay                // 成功后重置退避
+            emit(update)                          // 消费者收集
+        } catch (e: CancellationException) {
+            throw e                               // 保留取消语义
+        } catch (e: Exception) {
+            delay(delayMs)                        // 出错后等
+            delayMs = (delayMs * 2).coerceAtMost(maxDelay)  // 指数退避
+        }
+    }
+}
+```
+
+### 14.5 防抖/节流（搜索框自动补全）
+
+```kotlin
+// 200ms 防抖：用户连续输入只触发最后一次
+fun <T> Flow<T>.debounce(delayMs: Long): Flow<T> = flow {
+    var last: T? = null
+    coroutineScope {
+        launch {
+            collect { last = it }
+        }
+        delay(delayMs)
+        last?.let { emit(it) }
+    }
+}
+
+// 使用：搜索框
+searchQuery
+    .debounce(200)
+    .map { query -> fetchSuggestions(query) }
+    .collect { suggestions -> updateUI(suggestions) }
+```
+
+### 14.6 生产者-消费者模式（Channel）
+
+```kotlin
+// 数据采集场景：后台生产 + UI 线程消费
+val channel = Channel<Int>(Channel.BUFFERED)
+
+// 生产者协程
+val producer = launch(Dispatchers.IO) {
+    for (i in 1..1000) {
+        val data = fetchSensorData(i)
+        channel.send(data)
+        delay(100)                               // 模拟周期
+    }
+    channel.close()                               // 发完关闭
+}
+
+// 消费者协程
+val consumer = launch(Dispatchers.Main) {
+    for (data in channel) {
+        updateUI(data)                            // 逐条更新
+    }
+}
+
+// 两个独立生命周期，consumer 会在 channel.close() 后自动结束
+```
+
+### 14.7 Data Streaming（Flow + WebSocket/SSE）
+
+```kotlin
+// 从 WebSocket 读股票行情
+fun stockStream(symbol: String): Flow<StockTick> = channelFlow {
+    val ws = OkHttpClient.newWebSocket(
+        Request.Builder().url("wss://stream.example.com/$symbol").build(),
+        object : WebSocketListener() {
+            override fun onMessage(ws: WebSocket, text: String) {
+                val tick = Json.decodeFromString<StockTick>(text)
+                trySend(tick)                       // 送入 Flow
+            }
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                close()                              // 关闭 Flow
+            }
+            override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
+                close(t)                             // 异常关闭
+            }
+        }
+    )
+    awaitClose { ws.cancel(1000, "Consumer gone") }  // 资源清理
+}
+
+// 消费者：取最近 100 条计算平均价
+stockStream("AAPL")
+    .filter { it.price > 100 }
+    .map { it.price }
+    .take(100)
+    .average()
+    .collect { avg -> displayAvg(avg) }
+```
+
+### 14.8 gRPC + Coroutines 实战
+
+```kotlin
+// 依赖
+implementation("io.grpc:grpc-kotlin-stub:1.4.1")
+
+class GreeterClient(channel: ManagedChannel) {
+    private val stub = GreeterCoroutineGrpc.newStub(channel)
+
+    // Unary
+    suspend fun sayHello(name: String): String =
+        stub.sayHello(HelloRequest.newBuilder().setName(name).build()).message
+
+    // Server streaming
+    fun streamReplies(name: String): Flow<String> = flow {
+        stub.lotsOfReplies(
+            HelloRequest.newBuilder().setName(name).build()
+        ).collect { reply ->
+            emit(reply.message)
+        }
+    }
+}
+
+// 使用
+scope.launch {
+    val msg = client.sayHello("Mike")
+    println(msg)
+
+    client.streamReplies("Alice").collect { msg ->
+        println("Got: $msg")
+    }
+}
+```
+
+### 14.9 协程取消与清理（资源管理）
+
+```kotlin
+class ConnectionManager {
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO
+    )
+    private var connection: Connection? = null
+
+    fun start() {
+        scope.launch {
+            connection = openConnection()
+            try {
+                // 业务逻辑...
+                while (isActive) {
+                    keepAlive()
+                    delay(30_000)
+                }
+            } finally {
+                // ✅ 协程取消/异常时都会执行
+                connection?.close()
+                connection = null
+            }
+        }
+    }
+
+    fun stop() {
+        scope.cancel()              // 取消所有子协程
+        scope.coroutineContext[Job]?.join()   // 等清理完成
+    }
+}
+
+// Android 上：onDestroy 调 stop()
+// JVM 后台服务：JVM shutdown hook 调 stop()
+```
+
+### 14.10 协程异常处理（完整模式）
+
+```kotlin
+// 模式 1：try/catch 在业务层
+suspend fun fetchUser() {
+    try {
+        api.getUser()
+    } catch (e: IOException) {
+        log.error("网络错误", e)
+        throw UserServiceException("获取用户失败", e)
+    } catch (e: HttpException) {
+        when (e.code) {
+            404 -> throw UserNotFoundException()
+            401 -> throw AuthRequiredException()
+            else -> throw UserServiceException("HTTP ${e.code}", e)
+        }
+    }
+}
+
+// 模式 2：CoroutineExceptionHandler（全局兜底）
+val handler = CoroutineExceptionHandler { _, e ->
+    log.error("Coroutine failed", e)
+    metrics.recordFailure(e)
+}
+
+val scope = CoroutineScope(
+    SupervisorJob() + Dispatchers.IO + handler
+)
+
+// 模式 3：supervisorScope（隔离失败）
+suspend fun loadDashboard() = supervisorScope {
+    val userDeferred = async { fetchUser() }
+    val ordersDeferred = async { fetchOrders() }
+    // 一个失败不影响另一个
+    Dashboard(
+        user = userDeferred.await(),
+        orders = ordersDeferred.await()
+    )
+}
+```
+
+### 14.11 测试（kotlinx-coroutines-test）
+
+```kotlin
+import kotlinx.coroutines.test.*
+
+@Test
+fun `fetchUser 返回数据`() = runTest {
+    // virtual time：delay() 不真等
+    val user = fetchUser()
+    assertEquals("Mike", user.name)
+    // 测试耗时 ~10ms（不需真等 5s）
+}
+
+@Test
+fun `timeout 后抛异常`() = runTest {
+    assertFailsWith<TimeoutCancellationException> {
+        withTimeout(100) {                        // 虚拟 100ms
+            delay(5000)                           // 虚拟 5s（会超时）
+        }
+    }
+}
+
+@Test
+fun `测试 Flow`() = runTest {
+    val flow = flow {
+        emit(1)
+        delay(100)
+        emit(2)
+    }
+
+    val results = flow.toList()
+    assertEquals(listOf(1, 2), results)
+}
+
+@Test
+fun `测试 ViewModel`() = runTest {
+    val viewModel = MyViewModel()
+    viewModel.uiState.test {
+        // 收集 Flow，验证每个状态
+        assertEquals(Loading, awaitItem())
+        assertEquals(Success(data), awaitItem())
+    }
+}
 ```
 
 ## 15. 与 Netty 整合
