@@ -43,6 +43,7 @@ updated: 2026-09-20
 | §10 | [[draft-10-known-issues\|已知坑]] | any 滥用、类型断言、装饰器实验性、严格模式 |
 | §11 | **[[draft-11-comparison\|对比选型]]** | **TypeScript vs JavaScript vs Flow vs Dart** |
 | §12 | [[draft-12-use-cases\|应用场景]] | Node.js 后端 / React/Vue/Angular 前端 / 全栈 / 库开发 |
+| **§13** | **[[draft-13-typescript-vs-javascript\|TS vs JS 深度对比]]** | **13 维 side-by-side + 何时用 + JS→TS 迁移指南** |
 
 ## 标签
 `#typescript` `#javascript` `#type-system` `#generics` `#node-js` `#frontend`

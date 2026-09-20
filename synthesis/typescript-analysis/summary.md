@@ -75,6 +75,7 @@ TypeScript 不只是「带类型的 JavaScript」——它是**JavaScript 生态
 | §10 | [[draft-10-known-issues\|已知坑]] | any 滥用、类型断言、装饰器实验性 |
 | §11 | [[draft-11-comparison\|对比选型]] | **TypeScript vs JavaScript vs Flow vs Dart** |
 | §12 | [[draft-12-use-cases\|应用场景]] | Node.js / React/Vue/Angular / 全栈 / 库开发 |
+| **§13** | **[[draft-13-typescript-vs-javascript\|TS vs JS 深度对比]]** | **13 维 side-by-side + 何时用 + JS→TS 迁移指南** |
 
 ---
 
