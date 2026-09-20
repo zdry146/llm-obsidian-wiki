@@ -1,8 +1,8 @@
 {
   "version": 1,
   "stats": {
-    "total_sources_ingested": 9,
-    "total_pages": 102
+    "total_sources_ingested": 10,
+    "total_pages": 134
   },
   "sources": [
     {
@@ -209,6 +209,55 @@
         "synthesis/kotlin-analysis/draft-10-pitfalls.md",
         "synthesis/kotlin-analysis/draft-11-comparison.md",
         "synthesis/kotlin-analysis/draft-12-use-cases.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-09-15T09:07:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-09-15T09:07:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "live-analysis",
+      "project": "synthesis/kotlin-analysis/variance",
+      "sources": [
+        "Kotlin Docs - Generics",
+        "Kotlin in Action - Chapter 9: Generics",
+        "Effective Java - PECS Principle"
+      ],
+      "pages_created": [
+        "synthesis/kotlin-analysis/draft-13-variance.md"
+      ],
+      "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-09-20T10:50:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-09-20T11:30:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "live-analysis",
+      "project": "synthesis/typescript-analysis",
+      "sources": [
+        "TypeScript 5.x Docs (typescriptlang.org/docs)",
+        "TypeScript Handbook",
+        "Microsoft TypeScript Blog",
+        "Effective TypeScript (Dan Vanderkam)"
+      ],
+      "pages_created": [
+        "synthesis/typescript-analysis/moc.md",
+        "synthesis/typescript-analysis/summary.md",
+        "synthesis/typescript-analysis/draft-00-background.md",
+        "synthesis/typescript-analysis/draft-01-syntax-core.md",
+        "synthesis/typescript-analysis/draft-02-functions.md",
+        "synthesis/typescript-analysis/draft-03-type-system.md",
+        "synthesis/typescript-analysis/draft-04-generics.md",
+        "synthesis/typescript-analysis/draft-05-classes-oop.md",
+        "synthesis/typescript-analysis/draft-06-modules.md",
+        "synthesis/typescript-analysis/draft-07-tooling.md",
+        "synthesis/typescript-analysis/draft-08-build-bundlers.md",
+        "synthesis/typescript-analysis/draft-09-best-practices.md",
+        "synthesis/typescript-analysis/draft-10-known-issues.md",
+        "synthesis/typescript-analysis/draft-11-comparison.md",
+        "synthesis/typescript-analysis/draft-12-use-cases.md"
       ],
       "pages_updated": []
     }

@@ -8,6 +8,7 @@
 - [[okhttp-analysis/summary]] - OkHttp 4.12+ 全量分析：拦截器链、连接池、HTTP/2、缓存、Okio、亲历 Jenkins+SonarQube 401 bug 复盘（ #java #okhttp #http-client #square #4.12）
 - [[grpc-analysis/summary]] - gRPC 1.66+ 全量分析：HTTP/2 + Protobuf + 4 流式 + 拦截器 + xDS 负载均衡 + gRPC↔Netty↔mu-server 6 维对比（ #grpc #protobuf #rpc #http2 #netty #cncf #1.66）
 - [[kotlin-analysis/summary]] - Kotlin 2.0+ 全量分析：null 安全/协程/KMP/DSL + 与 Java/Scala/Groovy/C# 对比 + 在 OkHttp/gRPC/mu-server 生态中的角色（ #kotlin #jvm #coroutines #kmp #jetbrains #2.0）
+- [[typescript-analysis/summary]] - TypeScript 5.x 全量分析：类型系统/泛型/async-await/工具链/构建/与 JS/Flow/Dart 对比 + 在 Node.js/前端生态中的角色（ #typescript #javascript #node-js #frontend #microsoft #5）
 
 ## Concepts
 - [[continuous-delivery]] — DB2 12连续交付与函数级别管理（ #db2 #zos)
