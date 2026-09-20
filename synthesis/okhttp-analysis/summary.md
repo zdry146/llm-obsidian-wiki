@@ -95,6 +95,7 @@ OkHttp 不是"又一个 HTTP 客户端"——它是 **JVM 生态事实标准的 
 - **[[moc]]** — 本目录 Map of Content
 - **跨笔记**: [[draft-10-known-issues]] 含 Jenkins pipeline 真实踩坑
 - **关联生态（HTTP 入站对照）**: [[mu-server-2.4.2-analysis/summary]] — mu-server 2.4.2（基于 Netty 的 HTTP 服务端，OkHttp 的对称物）
+- **实现语言**: [[kotlin-analysis/summary]] — Kotlin 2.0+（OkHttp 4.x+ 已用 Kotlin 重写，5.x 协程支持）
 - **源码**: https://github.com/square/okhttp
 
 ---

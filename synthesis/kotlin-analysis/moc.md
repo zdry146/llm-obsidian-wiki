@@ -43,6 +43,7 @@ updated: 2026-09-13
 | §10 | [[draft-10-pitfalls\|已知坑]] | null 安全陷阱、lateinit、Java 反射、协程泄漏 |
 | §11 | [[draft-11-comparison\|对比选型]] | **Kotlin vs Java vs Scala vs Groovy vs C#** |
 | §12 | [[draft-12-use-cases\|应用场景]] | Android / Server / KMP / Data Science + Kotlin 在 Netty/OkHttp/gRPC 的角色 |
+| **§13** | **[[draft-13-variance\|协变与逆变]]** | **`out T` / `in T` / 星投影 / PECS 原则 + Java 对比 + netlib-common 实战** |
 
 ## 标签
 `#kotlin` `#jvm` `#jetbrains` `#coroutines` `#kmp` `#dsl` `#android`
@@ -56,7 +57,7 @@ updated: 2026-09-13
 - **JDK 要求**: 编译目标 8+（最新 21+）
 - **分析时间**: 2026-09-13
 - **执行者**: Spark (基于 Kotlin 官方文档 + 实战经验)
-- **总产出**: 1 moc + 1 summary + 12 draft ≈ 3500 行 markdown
+- **总产出**: 1 moc + 1 summary + 13 draft ≈ 4000 行 markdown
 - **关键应用**: [[okhttp-analysis/summary]] (OkHttp 4.x+ Kotlin 实现)、[[grpc-analysis/summary]] (grpc-kotlin 协程支持)
 
 ## 跨笔记链接

@@ -296,6 +296,238 @@ for (status in Status.values()) {
 val parsed = Status.valueOf("ACTIVE")
 ```
 
+## 8.1 实战枚举设计模式（完整示例）
+
+### 模式 1：多属性 + 分类助手（HTTP Status 风格）
+
+```kotlin
+// 类似 gRPC/OkHttp 的 status code 设计
+enum class HttpStatus(val code: Int, val message: String) {
+    OK(200, "OK"),
+    BAD_REQUEST(400, "Bad Request"),
+    UNAUTHORIZED(401, "Unauthorized"),
+    FORBIDDEN(403, "Forbidden"),
+    NOT_FOUND(404, "Not Found"),
+    SERVER_ERROR(500, "Internal Server Error");
+
+    fun isSuccess() = code in 200..299
+    fun isClientError() = code in 400..499
+    fun isServerError() = code in 500..599
+    fun isError() = !isSuccess()
+
+    companion object {
+        private val byCode = values().associateBy { it.code }
+        fun fromCode(code: Int): HttpStatus = byCode[code]
+            ?: throw IllegalArgumentException("Unknown HTTP code: $code")
+    }
+}
+
+val status = HttpStatus.OK
+status.isSuccess()           // true
+HttpStatus.fromCode(404)     // NOT_FOUND
+HttpStatus.fromCode(999)     // 抛 IllegalArgumentException
+```
+
+**实战应用**：gRPC 的 16 个 Status Code 是同模式（见 [[grpc-analysis/draft-09-error-handling]]）。
+
+### 模式 2：实现接口（每个枚举值重写方法）
+
+```kotlin
+interface Drawable {
+    fun draw(): String
+}
+
+enum class Shape : Drawable {
+    CIRCLE {
+        override fun draw() = "○"
+        override fun area(r: Double) = Math.PI * r * r
+    },
+    SQUARE {
+        override fun draw() = "□"
+        override fun area(r: Double) = r * r
+    },
+    TRIANGLE {
+        override fun draw() = "△"
+        override fun area(r: Double) = Math.sqrt(3.0) / 4 * r * r
+    };
+
+    abstract fun area(r: Double): Double   // 每个枚举重写
+}
+
+Shape.CIRCLE.draw()           // "○"
+Shape.SQUARE.area(2.0)        // 4.0
+```
+
+**核心洞察**：每个枚举值是**匿名子类**，可重写方法。
+
+### 模式 3：伴生对象 + 工厂方法（性能优化）
+
+```kotlin
+enum class LogLevel(val level: Int, val tag: String) {
+    DEBUG(0, "DEBUG"),
+    INFO(1, "INFO"),
+    WARN(2, "WARN"),
+    ERROR(3, "ERROR");
+
+    companion object {
+        // 反向索引（O(1) 查找）
+        private val byTag = values().associateBy { it.tag }
+
+        fun fromTag(tag: String): LogLevel = byTag[tag.uppercase()]
+            ?: throw IllegalArgumentException("Unknown level: $tag")
+
+        fun isValid(tag: String) = tag.uppercase() in byTag
+    }
+}
+
+val level = LogLevel.fromTag("warn")    // WARN
+LogLevel.isValid("INFO")                // true
+LogLevel.isValid("trace")               // false
+```
+
+### 模式 4：Kotlin 1.9+ `entries`（替代 `values()`）
+
+```kotlin
+enum class Direction { NORTH, SOUTH, EAST, WEST }
+
+// ✅ Kotlin 1.9+：推荐使用 entries
+val allDirections: List<Direction> = Direction.entries
+// - 不可变 List（更安全）
+// - 不每次创建新数组（更高效）
+
+// ❌ values()（仍可用但不推荐）
+val array: Array<Direction> = Direction.values()
+// - 每次调用都 new Array
+// - 可变（可被外部修改）
+```
+
+**实战**：用 `entries` 做映射、过滤：
+
+```kotlin
+val activeDirections = Direction.entries.filter { it != Direction.WEST }
+
+// 用 entries 做反索引（init 块中构建）
+enum class HttpMethod(val method: String) {
+    GET("GET"), POST("POST"), PUT("PUT"), DELETE("DELETE");
+
+    companion object {
+        val byMethod = entries.associateBy { it.method }
+    }
+}
+
+HttpMethod.byMethod["POST"]   // POST
+```
+
+### 模式 5：枚举的扩展函数
+
+```kotlin
+fun Status.next(): Status = when (this) {
+    Status.ACTIVE -> Status.INACTIVE
+    Status.INACTIVE -> Status.DELETED
+    Status.DELETED -> Status.ACTIVE
+}
+
+fun Status.shortName(): String = name.take(3)
+
+Status.ACTIVE.next()       // INACTIVE
+Status.ACTIVE.shortName()  // "ACT"
+```
+
+**实战**：在 `Extensions.kt` 集中放扩展函数，不污染枚举定义文件。
+
+### 模式 6：与 sealed class 决策树
+
+```kotlin
+sealed class Event {
+    object Idle : Event()
+    data class Loading(val progress: Int) : Event()
+    data class Success(val data: List<Item>) : Event()
+    data class Failure(val error: Throwable) : Event()
+}
+
+fun render(event: Event) = when (event) {
+    is Event.Idle -> "空闲"
+    is Event.Loading -> "加载中: ${event.progress}%"
+    is Event.Success -> "成功: ${event.data.size} 条"
+    is Event.Failure -> "失败: ${event.error.message}"
+    // 编译器穷尽检查
+}
+```
+
+**何时用 enum** vs **sealed class**：
+- ✅ enum：所有实例同构（相同字段）
+- ✅ sealed class：每个子类字段不同
+
+### 模式 7：枚举 in gRPC 16 个状态码（真实实战）
+
+```kotlin
+// 与 grpc-analysis/draft-09-error-handling 对照
+enum class GrpcStatus(val code: Int, val isOk: Boolean) {
+    OK(0, true),
+    CANCELLED(1, false),
+    UNKNOWN(2, false),
+    INVALID_ARGUMENT(3, false),
+    DEADLINE_EXCEEDED(4, false),
+    NOT_FOUND(5, false),
+    ALREADY_EXISTS(6, false),
+    PERMISSION_DENIED(7, false),
+    RESOURCE_EXHAUSTED(8, false),
+    FAILED_PRECONDITION(9, false),
+    ABORTED(10, false),
+    OUT_OF_RANGE(11, false),
+    UNIMPLEMENTED(12, false),
+    INTERNAL(13, false),
+    UNAVAILABLE(14, false),
+    DATA_LOSS(15, false),
+    UNAUTHENTICATED(16, false);
+
+    companion object {
+        private val byCode = entries.associateBy { it.code }
+
+        fun fromCode(code: Int): GrpcStatus = byCode[code] ?: UNKNOWN
+
+        fun isRetryable(code: Int): Boolean {
+            val s = fromCode(code)
+            return s in setOf(UNAVAILABLE, RESOURCE_EXHAUSTED, ABORTED)
+        }
+    }
+}
+
+GrpcStatus.fromCode(14)          // UNAVAILABLE
+GrpcStatus.isRetryable(14)       // true（可重试）
+GrpcStatus.isRetryable(3)        // false（参数错，不重试）
+GrpcStatus.isRetryable(-1)       // false（未知 code 返回 UNKNOWN）
+```
+
+**实战**：`netlib-common` 的 `SmartRetryInterceptor` 重试逻辑可以直接用这个枚举。
+
+### 模式 8：自定义序列化（与 Protobuf 互转）
+
+```kotlin
+enum class Priority(val protoValue: Int) {
+    LOW(1),
+    MEDIUM(2),
+    HIGH(3);
+
+    fun toProto(): com.example.Priority = when (this) {
+        LOW -> com.example.Priority.LOW
+        MEDIUM -> com.example.Priority.MEDIUM
+        HIGH -> com.example.Priority.HIGH
+    }
+
+    companion object {
+        fun fromProto(p: com.example.Priority): Priority = when (p) {
+            com.example.Priority.LOW -> LOW
+            com.example.Priority.MEDIUM -> MEDIUM
+            com.example.Priority.HIGH -> HIGH
+            else -> MEDIUM
+        }
+    }
+}
+```
+
+**实战**：在 gRPC service 中转换 enum ↔ Protobuf enum。
+
 ## 9. 扩展属性
 
 ```kotlin

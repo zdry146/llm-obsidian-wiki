@@ -502,7 +502,7 @@ protoc -I . \
 |------|------|
 | **protoc** | Protobuf 编译器 |
 | **protoc-gen-grpc-java** | Java gRPC 插件 |
-| **protoc-gen-grpc-kotlin** | Kotlin gRPC 插件（推荐） |
+| **protoc-gen-grpc-kotlin** | [[kotlin-analysis/summary\|Kotlin]] gRPC 插件（推荐） |
 | **buf** | 现代 Protobuf 工具链（schema registry, lint, breaking change detection） |
 | **grpcurl** | 类 curl 工具，支持 server reflection |
 | **grpc-cli** | Google 官方 CLI（功能较 grpcurl 弱） |

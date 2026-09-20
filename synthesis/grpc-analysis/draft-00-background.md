@@ -86,7 +86,7 @@ updated: 2026-09-13
 | **C#** | grpc/grpc-dotnet | Stable | Microsoft + Google |
 | **Dart** | grpc/grpc-dart | Stable | Google |
 | **Rust** | tonic（社区） | Stable | hyperium/tonic |
-| **Kotlin** | grpc/grpc-kotlin | Stable | Google |
+| **[[kotlin-analysis/summary\|Kotlin]]** | grpc/grpc-kotlin | Stable | Google |
 | **Swift** | grpc/grpc-swift | Stable | Apple + Google |
 
 **核心原则**：**所有语言生成的 stub 接口完全一致**——服务端 Java、客户端 Go，可以无缝互调。

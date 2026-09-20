@@ -87,6 +87,7 @@ Kotlin 不只是"更好的 Java"——它是**JVM 生态的实际标准补充**�
 | §10 | [[draft-10-pitfalls\|已知坑]] | null 陷阱、lateinit、协程泄漏、Java 反射 |
 | §11 | [[draft-11-comparison\|对比选型]] | **Kotlin vs Java vs Scala vs Groovy vs C#** |
 | §12 | [[draft-12-use-cases\|应用场景]] | Android / Server / KMP / Data Science + 在 Netty/OkHttp/gRPC 的角色 |
+| **§13** | **[[draft-13-variance\|协变与逆变]]** | **`out T` / `in T` / 星投影 / PECS 原则 + Java 对比 + netlib-common 实战** |
 
 ---
 

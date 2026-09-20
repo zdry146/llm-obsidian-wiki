@@ -31,10 +31,10 @@ updated: 2026-09-12
 | 2013-05 | Square 发布 OkHttp 1.0（解决 Android HttpURLConnection 的各种 bug） |
 | 2014 | 2.x 系列：HTTP/2 支持稳定 |
 | 2016 | 3.x 系列：API 重写，Interceptor 模型成熟 |
-| 2019 | 4.0：用 Kotlin 重写（保留 Java API 二进制兼容） |
+| 2019 | 4.0：用 [[kotlin-analysis/summary\|Kotlin]] 重写（保留 Java API 二进制兼容） |
 | 2021 | 4.9.x：稳定主版本 |
 | 2023-10 | 4.12.0：JDK 21 IPv6/IPv4 bug 修复（关键！） |
-| 2024-09 | 5.0.0-alpha：Kotlin 协程原生支持 |
+| 2024-09 | 5.0.0-alpha：[[kotlin-analysis/summary\|Kotlin]] 协程原生支持 |
 | 2026 | 5.0.0 仍在 alpha，预计 GA 中 |
 
 ## 3. Square 与 OkHttp
@@ -110,7 +110,7 @@ Android 4.x 之前，`HttpURLConnection` 有大量 bug（DNS 缓存不刷新、�
 - **官方文档**: https://square.github.io/okhttp/
 - **最新 stable**: 4.12.0（2023-10）
 - **最新 alpha**: 5.0.0-alpha.14（2024-09，Kotlin 协程支持）
-- **依赖**: Okio 3.x + Kotlin stdlib（4.x 起）
+- **依赖**: Okio 3.x + [[kotlin-analysis/summary\|Kotlin]] stdlib（4.x 起）
 - **JDK**: Java 8+（4.x/5.x），Android API 21+（5.0 Lollipop）
 
 ## 9. 设计哲学（Square 官方表述）
