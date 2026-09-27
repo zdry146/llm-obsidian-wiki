@@ -686,6 +686,106 @@ val map = mutableMapOf("a" to 1)
 val a: Int by map                   // map["a"] 作为 a 的值
 ```
 
+### 10.2.1 四个属性委托逐项拆解
+
+#### ① `lazy` 委托
+
+```kotlin
+val heavy: HeavyObject by lazy {
+    HeavyObject()
+}
+```
+
+- `lazy { ... }` 是 Kotlin 标准库的**委托工厂**
+- 接收一个 lambda，**第一次**访问 `heavy` 时才执行 lambda，之后缓存返回值
+- 默认线程安全（`LazyThreadSafetyMode.SYNCHRONIZED`）
+- 可选模式：
+  ```kotlin
+  val heavy by lazy(LazyThreadSafetyMode.NONE) { HeavyObject() }       // 单线程，更快
+  val heavy by lazy(LazyThreadSafetyMode.PUBLICATION) { HeavyObject() } // 多读单写
+  ```
+- 适用：初始化开销大、不一定用到的对象
+
+Java 对照（最接近的等价写法）：
+```java
+class HeavyHolder {
+    private volatile HeavyObject heavy;
+    public HeavyObject getHeavy() {
+        if (heavy == null) {
+            synchronized (this) {
+                if (heavy == null) heavy = new HeavyObject();
+            }
+        }
+        return heavy;
+    }
+}
+```
+
+#### ② `Delegates.observable` 委托
+
+```kotlin
+var name: String by Delegates.observable("initial") { _, old, new ->
+    println("Changed from $old to $new")
+}
+```
+
+- 第一个参数：初始值
+- 第二个参数：lambda `(property, oldValue, newValue) -> Unit`
+- **每次赋值后**触发 callback（after the assignment）
+- 适用：UI 状态变化通知、数据变更日志、Property Change 监听
+- ⚠️ observable **不能拒绝赋值**，只能观察
+
+#### ③ `Delegates.vetoable` 委托
+
+```kotlin
+var age: Int by Delegates.vetoable(0) { _, _, new ->
+    new >= 0    // false 时拒绝
+}
+```
+
+- lambda 签名 `(property, oldValue, newValue) -> Boolean`
+- 返回 `true` → 接受新值；返回 `false` → **拒绝，旧值保留**
+- 适用：表单校验、范围限制、不变量保护
+
+**observable vs vetoable**：
+
+| 维度 | observable | vetoable |
+|---|---|---|
+| Lambda 返回类型 | `Unit` | `Boolean` |
+| 触发时机 | 赋值后（after） | 赋值前（before） |
+| 能拒绝赋值？ | ❌ | ✅ |
+| 拒绝时 | — | 旧值保留 |
+
+#### ④ `map` 委托
+
+```kotlin
+val map = mutableMapOf("a" to 1)
+val a: Int by map                   // map["a"] 作为 a 的值
+```
+
+- 把 **Map 的 key** 当成属性的"存储后端"
+- 读 `a` ≡ `map["a"]`；写 `a = 2` ≡ `map["a"] = 2`
+- **Map 必须可变**（`mutableMapOf` / `HashMap`），不可变 Map 只能读不能写
+- 适用：从配置 / JSON / DB 读出的 Map 直接绑成属性
+
+实战：动态配置
+```kotlin
+val config = mutableMapOf<String, Any>(
+    "timeout" to 30,
+    "retries" to 3
+)
+val timeout: Int by config
+val retries: Int by config
+
+println(timeout)            // 30
+config["timeout"] = 60
+println(timeout)            // 60 — 自动反映
+```
+
+---
+
+**核心洞察**：所有 `by xxx` 委托的本质都是**把属性的 getter/setter 转发给某个 backing object**。Kotlin 编译器在编译期自动生成对应的 `getValue()` / `setValue()` 扩展函数调用 — 所以你写的 `val heavy by lazy { ... }` 实际上是 Kotlin 帮你写了访问 lazy 委托的样板代码。这也是为什么你可以给任意类自定义委托：只要实现 `operator fun getValue(...)` 和 `operator fun setValue(...)`，就能 `by` 它。
+
 ## 11. 嵌套类与内部类
 
 ```kotlin
