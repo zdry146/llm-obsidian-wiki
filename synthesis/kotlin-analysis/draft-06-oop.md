@@ -11,11 +11,11 @@ provenance:
   extracted: 0.90
   inferred: 0.08
   ambiguous: 0.02
-base_confidence: 0.88
+base_confidence: 0.90
 lifecycle: draft
-lifecycle_changed: 2026-09-13
+lifecycle_changed: 2026-09-27
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-27
 ---
 
 # §06 Kotlin 面向对象
@@ -47,6 +47,97 @@ val user = User("Mike", 30)
 println(user.greet())           // "Hello, Mike!"
 println(user.isAdult)          // true
 ```
+
+### 1.1 User 类逐项拆解
+
+#### ① 主构造函数（primary constructor）
+
+```kotlin
+class User(val name: String, val age: Int)
+```
+
+- 写在类头上的就是**主构造函数**
+- 关键点：`val name` / `val age` 里的 `val` 让这俩参数**自动变成类的属性**（生成私有字段 + getter）
+- 如果只写 `class User(name: String, age: Int)`（不带 `val/var`），那只是构造参数，构造完就丢，**不能** `user.name` 这样访问
+
+对应 Java：
+```java
+class User {
+    private final String name;
+    private final int age;
+    public User(String name, int age) { this.name = name; this.age = age; }
+    public String getName() { return name; }
+    public int getAge() { return age; }
+}
+```
+
+#### ② `init` 块
+
+```kotlin
+init {
+    require(age >= 0) { "Age must be positive" }
+}
+```
+
+- `init { ... }` 是**主构造函数的一部分**，构造对象时跟着一块跑
+- 一个类可以有**多个** `init` 块，按声明顺序从上到下执行
+- `require(condition) { "msg" }` = Kotlin 标准库断言：
+  - `true` → 通过
+  - `false` → 抛 `IllegalArgumentException(msg)`
+- `{ "..." }` 是 lazy lambda — **只有真出错时才拼字符串**
+
+#### ③ 成员函数
+
+```kotlin
+fun greet(): String = "Hello, $name!"
+```
+
+- `fun` 声明函数
+- `= "..."` 是**表达式体**（expression body），单表达式时更简洁
+- 等价写法：
+```kotlin
+fun greet(): String { return "Hello, $name!" }
+```
+- 字符串模板：`$name` 直接插变量；`${expr}` 插任意表达式（`${name.uppercase()}`）
+
+#### ④ 自定义 getter 的属性
+
+```kotlin
+val isAdult: Boolean
+    get() = age >= 18
+```
+
+- 声明格式：`val/var 属性名: 类型 get() = ...`
+- 这种写法 = **没有 backing field**（每次访问都重算）
+- 编译器看到只读了 `age`、没存自己，所以不生成字段
+- 调用时跟普通属性一样：`user.isAdult`（**不加括号**）
+
+#### ⑤ 另一个 computed property
+
+```kotlin
+val description: String
+    get() = "User($name, $age)"
+```
+
+- 跟 `isAdult` **完全同款**，都是 computed property，无 backing field
+- 注释里分开写只是为了演示两种典型用法 — 一个返回 `Boolean`、一个返回 `String`，机制相同
+
+---
+
+**对照速查**：
+
+| 写法 | 含义 |
+|---|---|
+| `class Foo(val x: Int)` | 参数 + 自动属性（带 backing field） |
+| `class Foo(x: Int)` | 纯构造参数（构造完就丢，访问不到） |
+| `val y: Int = 10` | 普通属性，有 backing field |
+| `val y: Int get() = ...` | 计算属性，**无 backing field** |
+| `var y: Int get()=...; set(v){...}` | 自定义 getter + setter，可加校验 |
+| `init { ... }` | 构造期执行，可多个 |
+| `fun foo() = expr` | 表达式体函数（单表达式） |
+| `fun foo() { ... }` | 块体函数（多行用这个） |
+
+**核心洞察**：整段 User 类**没有任何 Java 风格的 getter/setter/构造器样板**，全靠 `val`、expression body、computed property 把样板消掉。这就是 Kotlin OOP 的核心收益 —— **声明即规格，计算即访问**。
 
 ## 2. data class（杀手特性）
 
