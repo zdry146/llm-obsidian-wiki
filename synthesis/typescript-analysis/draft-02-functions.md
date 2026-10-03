@@ -11,11 +11,11 @@ provenance:
   extracted: 0.90
   inferred: 0.08
     ambiguous: 0.02
-base_confidence: 0.88
+base_confidence: 0.90
 lifecycle: draft
-lifecycle_changed: 2026-09-20
+lifecycle_changed: 2026-10-03
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-10-03
 ---
 
 # §02 TypeScript 函数与异步
@@ -100,6 +100,134 @@ function log(...args: [...string[], number]) {
 log("a", "b", 1);  // OK
 log(1);            // ❌ 至少需要一个 string
 ```
+
+### 4.1 综合拆解：函数声明的 6 种形态
+
+#### ① 函数声明（Function Declaration）
+
+```typescript
+function add(a: number, b: number): number {
+    return a + b;
+}
+```
+
+- **`function` 关键字 + 函数名** = 声明式
+- **会 hoist（提升）**：可以在声明之前调用
+  ```typescript
+  add(1, 2);  // ✅ 即使 add 在下面声明也能跑
+  function add(a, b) { return a + b; }
+  ```
+- 适用：模块顶层 / 公共工具函数
+
+#### ② 箭头函数（Function Expression）
+
+```typescript
+const add2 = (a: number, b: number): number => a + b;
+```
+
+- **没有名字，赋值给变量**
+- **不会 hoist**：必须先声明后使用
+- 单表达式时 `{ return ... }` 可省略为 `=> ...`
+- **不能**当构造函数用（`new add2()` 报错）
+- `this` 是**词法绑定**（定义时的外层 `this`），不是动态绑定
+
+**function vs 箭头 关键差异**：
+
+| 维度 | `function add() {}` | `const add = () => {}` |
+|---|---|---|
+| Hoist | ✅ | ❌ |
+| `this` 绑定 | 动态（运行时） | 词法（定义时） |
+| `arguments` 对象 | ✅ | ❌ |
+| 能 `new` 吗 | ✅ | ❌ |
+| 适合做 | 普通函数、构造器 | 回调、短小表达式 |
+
+#### ③ 函数类型别名
+
+```typescript
+type AddFn = (a: number, b: number) => number;
+const add3: AddFn = (a, b) => a + b;
+```
+
+- `type AddFn = ...` 定义**函数类型别名**
+- 关键点：**函数类型的写法 `(args) => returnType`** —— 长得跟箭头函数一样但语义不同
+- 变量侧 `add3` 不需要再写参数类型（自动从 `AddFn` 推断）
+- 适用：复杂函数签名复用
+
+对比 `interface` 写法：
+```typescript
+interface AddFnI {
+    (a: number, b: number): number;   // 用 : 返回类型，不是 =>
+}
+```
+
+`type` vs `interface` 在函数类型上**基本可互换**，但 `type` 还能表达 union / intersection / 工具类型，能力更广。
+
+#### ④ 可选参数（`?`）
+
+```typescript
+function greet(name: string, greeting?: string): string {
+    return `${greeting ?? "Hello"}, ${name}!`;
+}
+```
+
+- 参数后加 `?` = **可传可不传**
+- TS 推断 `greeting` 类型为 **`string | undefined`**（不是 `string`）
+- 直接 `greeting.toUpperCase()` 报错，需要：
+  - `greeting?.toUpperCase()` — optional chaining
+  - `greeting ?? "Hello"` — **只对 `null`/`undefined` 给默认值**，比 `||` 精确
+- **必须放在必填参数之后**：`(name?: string, greeting: string)` ❌ 编译报错
+
+#### ⑤ 默认参数（`=`）
+
+```typescript
+function greet2(name: string, greeting: string = "Hello"): string {
+    return `${greeting}, ${name}!`;
+}
+```
+
+- 参数后 `= "Hello"` = **不传时使用默认值**
+- TS **自动收窄类型**：`greeting` 在函数体内就是 `string`（不是 `string | undefined`），不需要 `??`
+
+**`?` vs `=`**：
+
+| 维度 | `greeting?: string` | `greeting: string = "Hello"` |
+|---|---|---|
+| 必须传？ | ❌ | ❌ |
+| 函数体内类型 | `string \| undefined` | `string`（已收窄） |
+| 默认值 | 无（手动给）| 自动 `"Hello"` |
+| 适用 | "可有可无" | "有合理默认值，多数时候省略" |
+
+#### ⑥ 剩余参数（`...rest`）
+
+```typescript
+function sum(...numbers: number[]): number {
+    return numbers.reduce((a, b) => a + b, 0);
+}
+```
+
+- `...numbers: number[]` = **把所有剩余参数打包成数组**
+- 函数体内 `numbers` 就是 `number[]`
+- **只能有一个**，且必须放在最后：
+  ```typescript
+  function f(...rest: number[], last: string)  // ❌
+  function f(first: string, ...rest: number[])  // ✅
+  ```
+- 两种形态对比：
+  - `...number[]` — 数组类型，每个元素都是 number（实践常用）
+  - `...[string, number, boolean]` — tuple 类型，每个位置类型已知（TS 4.0+）
+
+对比 ES5 时代（无 rest）：
+```javascript
+// 老写法：靠 arguments 对象
+function sum() {
+    var args = Array.prototype.slice.call(arguments);  // 必须手动转数组
+    return args.reduce(function(a, b) { return a + b; }, 0);
+}
+```
+
+---
+
+**核心洞察**：TypeScript 函数语法 = **JS 函数语法 + 类型注解**。重点不是新概念，是把"运行时写法"补上"编译期类型契约"：`?` 表达"可省"、`=` 表达"有默认"、`...rest` 表达"打包成数组"，每个语法都有清晰的语义边界。学会用 `type AddFn = ...` 把函数签名抽出来，是 TS 类型体操的入门砖。
 
 ## 5. this 参数（TypeScript 独有）
 
