@@ -15,11 +15,11 @@ provenance:
   extracted: 0.90
   inferred: 0.08
   ambiguous: 0.02
-base_confidence: 0.89
-lifecycle: draft
-lifecycle_changed: 2026-10-03
+base_confidence: 0.93
+lifecycle: stable
+lifecycle_changed: 2026-10-04
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 ---
 
 # §04 Java 21 LTS - 虚拟线程 + 模式匹配
