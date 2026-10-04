@@ -58,6 +58,124 @@ executor.submit(() -> {
 executor.close();
 ```
 
+### 1.1 Virtual threads 实战拆解
+
+#### ① `Thread.startVirtualThread` —— 最直接
+
+```java
+Thread vt = Thread.startVirtualThread(() -> {
+    System.out.println("Hello from " + Thread.currentThread());
+});
+vt.join();  // 等待完成
+```
+
+- 一次性启动，无需持有 Thread 引用
+- 自动使用 `ForkJoinPool.commonPool()` 作为 carrier
+- 适用：脚本 / 一次性任务 / 测试代码
+
+#### ② `Executors.newVirtualThreadPerTaskExecutor` —— 服务推荐
+
+```java
+try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
+    for (int i = 0; i < 1000; i++) {
+        exec.submit(() -> handleRequest());
+    }
+}  // 退出 try 时自动 await termination
+```
+
+- 每个任务一个虚拟线程（**不要池化**）
+- try-with-resources 自动关闭 + 等待
+- 适用：HTTP 服务器 / 批处理 / 替代 `newFixedThreadPool`
+
+#### ③ `Thread.ofVirtual()` —— 细粒度配置
+
+```java
+Thread vt = Thread.ofVirtual()
+    .name("worker-1")
+    .daemon(false)
+    .uncaughtExceptionHandler((t, e) -> log.error("VT crashed", e))
+    .start(() -> process());
+```
+
+- 配置：`name` / `daemon` / `priority` / `uncaughtExceptionHandler` / `contextClassLoader`
+- 适用：库代码 / 自定义线程管理
+
+#### ④ `Thread.Builder` —— 工厂模式（共享配置）
+
+```java
+Thread.Builder factory = Thread.ofVirtual()
+    .name("worker-")
+    .daemon(true);
+
+Thread t1 = factory.start(() -> work(1));  // name=worker-0
+Thread t2 = factory.start(() -> work(2));  // name=worker-1
+```
+
+- 工厂复用配置（不用每次写 name/daemon）
+- 适合：批量创建同类虚拟线程
+
+#### ⑤ Pinning 机制详解
+
+```java
+// ❌ synchronized + I/O → pinning（Java 21）
+synchronized (lock) {
+    blockingIO();  // 虚拟线程被 pin 在 carrier 上，占着 OS 线程
+}
+
+// ✅ 改用 ReentrantLock
+ReentrantLock lock = new ReentrantLock();
+lock.lock();
+try {
+    blockingIO();
+} finally {
+    lock.unlock();
+}
+
+// 检测 pinning（启动参数）
+// java -Djdk.tracePinnedThreads=full MyApp
+// 输出详细 pinning 栈，定位问题
+```
+
+**Pinning 演进时间线**：
+- **Java 21**：synchronized + I/O → pinning ⚠️（常见问题）
+- **Java 24**（JEP 491）：synchronized 基本不 pinning（除 JNI）✅
+- 解决方案：迁移到 `ReentrantLock`，或等升级到 24+
+
+#### ⑥ vs Platform Thread 速查
+
+| 维度 | Platform Thread | Virtual Thread |
+|---|---|---|
+| 调度 | OS 内核 1:1 | JVM M:N（虚拟→ForkJoinPool）|
+| 默认栈 | 1 MB | ~几 KB（按需扩容）|
+| 创建成本 | 高（系统调用）| 极低（Java 对象）|
+| 数量上限 | 几千 | 百万级 |
+| 阻塞 I/O | 占 OS 线程 | **释放 carrier** |
+| `synchronized` | 安全 | ⚠️ pinning（21）/ 安全（24+）|
+| `Thread.sleep` | 占 OS 线程 | 占虚拟线程但不占 OS 线程 |
+| `ThreadLocal` | 正常 | ⚠️ 内存放大（百万虚拟线程 × TL = OOM）→ 改用 [[draft-05-java-22-25-modern-concurrency#11-scoped-values-final\|Scoped Value]] |
+| 适用 | CPU-bound | **I/O-bound** |
+
+#### ⑦ 4 种创建方式对照
+
+| 方式 | 一行写法 | 适用场景 |
+|---|---|---|
+| `startVirtualThread` | `Thread.startVirtualThread(task)` | 一次性脚本 |
+| `newVirtualThreadPerTaskExecutor` | `Executors.newVirtualThreadPerTaskExecutor()` | 服务/批处理 |
+| `Thread.ofVirtual()` | `Thread.ofVirtual().name(...).start(task)` | 单条 + 配置 |
+| `Thread.Builder` | `factory.start(task)` | 批量复用配置 |
+
+---
+
+**核心洞察**：虚拟线程的"心智模型"和平台线程**根本不同**——
+- ❌ **错误思维**：把虚拟线程当"轻量级线程"，用线程池 + 队列
+- ✅ **正确思维**：把虚拟线程当"自动让出的同步代码"——按需创建，I/O 阻塞时让出 carrier，CPU 运行时才占用
+
+实战铁律：
+1. **不要池化虚拟线程**（`newFixedThreadPool(100)` + 虚拟线程 = 错的）
+2. **不要在虚拟线程里用 synchronized + 阻塞 I/O**（pinning 浪费 OS 线程，Java 24+ 才解决）
+3. **不要用 ThreadLocal 存大对象**（百万虚拟线程 × TL = OOM，改用 [[draft-05-java-22-25-modern-concurrency#11-scoped-values-final\|Scoped Value]]）
+4. **同步 API 直接用**（`RestTemplate` / `JdbcTemplate` / `HttpClient`）——虚拟线程让它们"自动异步"
+
 ### 虚拟线程 vs 平台线程
 
 | 维度 | Platform Thread | Virtual Thread |
