@@ -13,11 +13,11 @@ provenance:
   extracted: 0.90
   inferred: 0.08
   ambiguous: 0.02
-base_confidence: 0.88
+base_confidence: 0.91
 lifecycle: draft
-lifecycle_changed: 2026-10-03
+lifecycle_changed: 2026-10-04
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 ---
 
 # §03 Java 14-17 数据 + 模式匹配
@@ -168,6 +168,165 @@ public record Negate(Expr expr) implements Expr {
     @Override public double eval() { return -expr.eval(); }
 }
 ```
+
+### 2.1 Sealed classes 实战拆解
+
+#### ① permits 子句的两种写法
+
+```java
+// 写法 1：独立子类（Java 17+ 可跨文件）
+public sealed class Shape permits Circle, Rectangle, Square { ... }
+
+// 文件 A
+public final class Circle extends Shape { ... }
+
+// 文件 B
+public final class Rectangle extends Shape { ... }
+
+// 文件 C
+public final class Square extends Shape { ... }
+```
+
+```java
+// 写法 2：嵌套子类（隐式 permits）
+public sealed class Shape {
+    public static final class Circle extends Shape { ... }
+    public static final class Rectangle extends Shape { ... }
+    public static final class Square extends Shape { ... }
+}
+```
+
+**注意**：Java 17+ permits 子类**可以跨文件 / 跨包**（只要同模块），Kotlin sealed class 一直要求同 package。Java 这点更宽松。
+
+#### ② 3 种子类修饰符对比
+
+```java
+// final - 终止继承（最严格）
+public final class Circle extends Shape { ... }
+
+// sealed - 再封闭一层（多级 ADT）
+public sealed class Dog extends Animal permits Husky, Beagle { ... }
+public final class Husky extends Dog { ... }
+public final class Beagle extends Dog { ... }
+
+// non-sealed - 完全开放
+public non-sealed class Cat extends Animal { ... }  // 可以被任何人继承
+```
+
+**对比表**：
+
+| 修饰符 | 继承性 | 适用场景 |
+|---|---|---|
+| `final` | ❌ 完全终止 | 大多数子类（不需要再扩展）|
+| `sealed` | ✅ 限定继承 | 多级 ADT（递归结构）|
+| `non-sealed` | ✅ 完全开放 | 框架扩展点 |
+
+#### ③ permits 列表的硬约束
+
+```java
+// ❌ 编译错误：子类不在 permits 列表
+public sealed class Shape permits Circle, Rectangle {}
+public class Triangle extends Shape {}  // ❌ Triangle 不在 permits
+
+// ❌ 编译错误：子类与 sealed 不同模块
+// module-info 里 modules 不匹配
+
+// ❌ 编译错误：子类没有兼容修饰符
+public sealed class Shape permits Circle {}
+public class Circle extends Shape {}  // ❌ Circle 必须 final / sealed / non-sealed
+```
+
+#### ④ exhaustive switch 的编译器魔法
+
+```java
+// Java 21+ switch pattern（standard）
+static double area(Shape shape) {
+    return switch (shape) {
+        case Circle c    -> Math.PI * c.radius() * c.radius();
+        case Rectangle r -> r.width() * r.height();
+        case Square s    -> s.side() * s.side();
+        // 编译器验证已穷举 — 不需要 default
+        // 加一个 Circle 子类（如 Triangle）就编译失败
+    };
+}
+```
+
+**关键**：sealed permits + switch pattern = **编译期穷举保证**。漏 case / 多 case / 拼写错都会被编译器抓住。
+
+#### ⑤ sealed + record 联合（AST 完整例子）
+
+```java
+public sealed interface Expr
+    permits Constant, Add, Negate {
+
+    double eval();
+}
+
+public record Constant(double value) implements Expr {
+    @Override public double eval() { return value; }
+}
+
+public record Add(Expr left, Expr right) implements Expr {
+    @Override public double eval() { return left.eval() + right.eval(); }
+}
+
+public record Negate(Expr expr) implements Expr {
+    @Override public double eval() { return -expr.eval(); }
+}
+
+// 客户端：穷举 switch + record pattern 解构
+static String render(Expr e) {
+    return switch (e) {
+        case Constant(double v)       -> String.valueOf(v);
+        case Add(Expr l, Expr r)      -> render(l) + " + " + render(r);
+        case Negate(Expr expr)        -> "-" + render(expr);
+    };
+}
+```
+
+**实战模式**：
+1. `sealed interface` 定义有限类型
+2. 每个子类是 `record`（不可变数据载体）
+3. 操作时用 `switch + record pattern` 解构
+4. 加新子类 → 编译器把"漏处理"暴露在 build 时
+
+#### ⑥ sealed interface vs sealed class
+
+```java
+// sealed interface - 可多实现（推荐）
+public sealed interface JsonValue
+    permits JsonNull, JsonNumber, JsonString, JsonArray, JsonObject {}
+
+// 一个子类可同时实现多个 sealed interface
+public record JsonObject(Map<String, JsonValue> entries)
+    implements JsonValue, Iterable<Map.Entry<String, JsonValue>> {}
+
+// sealed class - 单继承
+public sealed class Result<T>
+    permits Success, Failure { ... }  // Success 不能同时 extends Other
+```
+
+**选型**：**优先用 `sealed interface`**（更灵活，不锁死单继承）。
+
+#### ⑦ sealed vs enum 对比
+
+| 维度 | enum | sealed |
+|---|---|---|
+| 子类数 | 固定（编译时）| 固定（编译时）|
+| 子类可携带不同字段 | ❌ | ✅ |
+| `instanceof` pattern | ❌ | ✅ |
+| exhaustive switch | ✅ | ✅ |
+| 可继承自己的子类 | ❌ | ✅（用 sealed 修饰符）|
+| 适用 | 简单状态（color/role）| 复杂数据（AST/Result/Event）|
+| 实例数 | 枚举值 = 实例 | 每个 record 可创建多个实例 |
+
+**经验法则**：
+- **enum**：所有实例字段相同（`Status.ACTIVE("Active")`）
+- **sealed**：每个 record 子类字段不同（`Add(Expr, Expr)` vs `Negate(Expr)`）
+
+---
+
+**核心洞察**：sealed class 是 Java 的 **ADT（Algebraic Data Type）**——把"封闭的有限可能性"编码进类型系统。配合 record + pattern matching switch，**编译器帮你验证穷举**，传统 OOP 的 `instanceof` + cast + 漏 case 全部消失。这是 Java 16-17 给"类型驱动开发"的杀手锏，**所有 AST / Result / Event / State 设计都应该重新评估能否改写成 sealed + record**。
 
 ## 3. pattern matching instanceof（JEP 394, Java 16 final）
 
