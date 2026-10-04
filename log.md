@@ -1,5 +1,6 @@
 # Log
 
+- [2026-10-04T23:56:00Z] CROSS_LINK pages_scanned=4 links_added=3 pages_modified=3 orphans_remaining=0 misc_affinity_updated=0 promotion_candidates=0 focus="java↔kotlin↔typescript 三方对照"
 - [2026-09-20T11:30:00Z] CROSS_LINK pages_scanned=15 links_added=6 pages_modified=4 orphans_remaining=0 misc_affinity_updated=0 promotion_candidates=0 focus="typescript↔kotlin↔grpc-web"
 - [2026-09-13T12:30:00Z] CROSS_LINK pages_scanned=15 links_added=10 pages_modified=4 orphans_remaining=0 misc_affinity_updated=0 promotion_candidates=0 focus="kotlin↔okhttp↔grpc↔mu-server"
 - [2026-09-13T00:55:00Z] CROSS_LINK pages_scanned=15 links_added=8 pages_modified=4 orphans_remaining=0 misc_affinity_updated=0 promotion_candidates=0 focus="grpc↔mu-server↔okhttp↔netty"

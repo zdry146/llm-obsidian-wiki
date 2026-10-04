@@ -224,4 +224,5 @@ val reply = stub.sayHello(HelloRequest.newBuilder().setName("mike").build())
 - **RPC 框架对照**: [[grpc-analysis/summary]] — grpc-kotlin 提供协程
 - **对比选型**: [[draft-11-comparison]] — Kotlin vs Java vs Scala vs Groovy
 - **应用场景**: [[draft-12-use-cases]] — Kotlin 在 Netty/OkHttp/gRPC/mu-server 角色
+- **三方对照**: [[../java-kotlin-typescript-comparison]] — Java vs Kotlin vs TypeScript 全方位对比
 - **实战代码**: `~/.openclaw/workspace-developer/netlib-common/`

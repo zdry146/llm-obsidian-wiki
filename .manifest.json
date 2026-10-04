@@ -1,8 +1,8 @@
 {
   "version": 1,
   "stats": {
-    "total_sources_ingested": 10,
-    "total_pages": 134
+    "total_sources_ingested": 11,
+    "total_pages": 135
   },
   "sources": [
     {
@@ -245,6 +245,7 @@
       "pages_created": [
         "synthesis/typescript-analysis/moc.md",
         "synthesis/typescript-analysis/summary.md",
+        "synthesis/typescript-analysis/draft-13-typescript-vs-javascript.md",
         "synthesis/typescript-analysis/draft-00-background.md",
         "synthesis/typescript-analysis/draft-01-syntax-core.md",
         "synthesis/typescript-analysis/draft-02-functions.md",
@@ -260,6 +261,31 @@
         "synthesis/typescript-analysis/draft-12-use-cases.md"
       ],
       "pages_updated": []
+    },
+    {
+      "ingested_at": "2026-10-04T23:56:00Z",
+      "size_bytes": 0,
+      "modified_at": "2026-10-05T00:10:00Z",
+      "content_hash": "sha256:live-analysis-not-source-document",
+      "source_type": "cross-cutting-synthesis",
+      "project": "synthesis/java-kotlin-typescript-comparison",
+      "sources": [
+        "Java 8 → 25 [[java-analysis/summary]]",
+        "Kotlin 2.0+ [[kotlin-analysis/summary]]",
+        "TypeScript 5.x [[typescript-analysis/summary]]",
+        "JEP / KEEP / TC39 各语言官方文档"
+      ],
+      "pages_created": [
+        "synthesis/java-kotlin-typescript-comparison.md"
+      ],
+      "pages_updated": [
+        "synthesis/java-analysis/summary.md",
+        "synthesis/kotlin-analysis/summary.md",
+        "synthesis/typescript-analysis/summary.md",
+        "index.md",
+        "hot.md",
+        "log.md"
+      ]
     }
   ]
 }

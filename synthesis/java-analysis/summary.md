@@ -182,4 +182,5 @@ Java 在这些生态中的角色（cross-references）：
 - **Map of Content**: [[moc]]
 - **TypeScript**: [[../typescript-analysis/summary]]
 - **Kotlin**: [[../kotlin-analysis/summary]]
+- **三方对照**: [[../java-kotlin-typescript-comparison]] — Java vs Kotlin vs TypeScript 全方位对比
 - **综合入口**: [[../summary]]

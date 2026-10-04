@@ -3,6 +3,7 @@ title: Hot Cache
 updated: 2026-09-12
 ---
 ## Recent Activity
+- **Cross-cutting synthesis: Java vs Kotlin vs TypeScript 三方对照** — 新增 1 个跨分析文档（synthesis/java-kotlin-typescript-comparison.md，23923 bytes，16 个维度）+ 3 个 summary.md 交叉链接
 - **Live analysis: TypeScript 5.x 全量分析** — 新增 15 个页面（synthesis/typescript-analysis/，含 moc + summary + 13 drafts），覆盖类型系统/泛型/async/类/模块/工具链/构建/最佳实践/坑/与 JS/Flow/Dart 对比/在 Node.js 与前端生态中的角色。
 - **Live analysis: Kotlin 2.0+ 全量分析** — 新增 15 个页面（synthesis/kotlin-analysis/，含 moc + summary + 13 drafts），覆盖 null 安全/协程/DSL/KMP/集合/OOP/Java 互操作/最佳实践/坑/对比/在 OkHttp/gRPC/mu-server 生态中的角色（draft-12）。
 - **Live analysis: gRPC 1.66+ 全量分析** — 新增 15 个页面（synthesis/grpc-analysis/，含 moc + summary + 13 drafts），覆盖架构/线协议/服务定义/客户端/服务端/4 流式/拦截器/负载均衡/错误处理/最佳实践/坑/与 Netty+mu-server+REST+GraphQL 全方位对比（draft-12）。

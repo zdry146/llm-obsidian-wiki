@@ -185,3 +185,4 @@ function isString(value: unknown): value is string {
 - **应用场景**: [[draft-12-use-cases]] — TS 在 Node.js / 前端 / 全栈
 - **JVM 对照**: [[kotlin-analysis/summary]] — Kotlin 同步生态
 - **gRPC 生态**: [[grpc-analysis/summary]] — grpc-web 是 TS 实现
+- **三方对照**: [[../java-kotlin-typescript-comparison]] — Java vs Kotlin vs TypeScript 全方位对比
