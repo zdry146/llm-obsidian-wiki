@@ -1,14 +1,14 @@
 ---
 title: "Java 全量分析综合报告 — 主入口"
 category: synthesis
-tags: [java, jvm, openjdk, lts, lambda, stream, virtual-thread, sealed, records, pattern-matching, analysis, index]
+tags: [java, jvm, openjdk, lts, lambda, stream, virtual-thread, sealed, records, pattern-matching, reactor, analysis, index]
 sources:
   - "OpenJDK JDK 25 Feature List (https://openjdk.org/projects/jdk/25/)"
   - "JEP Index (https://openjdk.org/jeps/0)"
   - "Java Language Specification (JLS)"
   - "Java 25 — InfoQ (Sep 2025)"
   - "Foojay JDK 25 Almanac"
-summary: "Java 8 → 25 全量分析 — 6 个 chapter：基础(Lambda/Stream/Optional)→ 现代(模块/HTTP/var)→ 数据+模式(records/sealed/pattern)→ 虚拟线程(Java 21 LTS)→ 现代并发(22-25)→ 版本速查"
+summary: "Java 8 → 25 全量分析 — 7 个 chapter：基础(Lambda/Stream/Optional)→ 现代(模块/HTTP/var)→ 数据+模式(records/sealed/pattern)→ 虚拟线程(Java 21 LTS)→ 现代并发(22-25)→ 版本速查→ Reactor 响应式"
 provenance:
   extracted: 0.85
   inferred: 0.12
@@ -39,7 +39,7 @@ Java 从 Java 8 (2014) 到 Java 25 (2025) 的 11 年里完成了**从"面向对�
 3. **Java 21 (2023, LTS)** — virtual threads (final) + pattern switch (final) + record patterns (final)，Java 第一次有了"百万级并发"原生支持
 4. **Java 25 (2025, LTS)** — Module Import Declarations + Compact Source Files + Scoped Values (final)，Java 第一次有了"现代化教学/脚本"体验 + 现代化上下文传递
 
-## 6 章导航
+## 7 章导航
 
 | # | 章节 | 版本 | 主题 |
 |---|---|---|---|
@@ -49,6 +49,7 @@ Java 从 Java 8 (2014) 到 Java 25 (2025) 的 11 年里完成了**从"面向对�
 | 4 | [[draft-04-java-21-lts-virtual-threads]] | **Java 21 LTS** | virtual threads / sequenced collections / pattern switch / record patterns / string templates |
 | 5 | [[draft-05-java-22-25-modern-concurrency]] | Java 22 → 25 | structured concurrency / scoped values / FFM API / primitive patterns / module imports / compact source files |
 | 6 | [[draft-06-version-timeline-cheatsheet]] | Java 8 → 25 | 版本时间线 + 速查 + 升级路径 |
+| 7 | [[draft-07-reactor]] | 跨版本 | **Project Reactor** — Mono / Flux / 操作符 / 调度 / 背压 / Spring WebFlux / R2DBC |
 
 ## 版本生态位
 
