@@ -27,11 +27,11 @@ provenance:
   extracted: 0.85
   inferred: 0.12
   ambiguous: 0.03
-base_confidence: 0.85
+base_confidence: 0.88
 lifecycle: draft
-lifecycle_changed: 2026-10-03
+lifecycle_changed: 2026-10-10
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # §05 Java 22-25 现代并发 + 教学体验
@@ -426,6 +426,158 @@ ScopedValue.get(CURRENT_USER);  // 当前 scope 内的值
 | 百万虚拟线程 | O(n) map 内存 | O(1) 单实例 |
 | 子线程继承 | 隐式 | 显式（`where().run()`）|
 | 嵌套 | 需手动栈 | 天然嵌套（栈式绑定）|
+
+### 11.1 Scoped Values 实战拆解
+
+#### ① 基础用法：bind + get
+
+```java
+private static final ScopedValue<User> CURRENT_USER = ScopedValue.newInstance();
+
+// 调用方
+public void handleRequest(User user, Runnable work) {
+    ScopedValue.where(CURRENT_USER, user)
+        .run(work);
+    // 退出 run 时自动解绑
+}
+
+// 接收方（任何嵌套调用深度）
+static void process() {
+    User u = ScopedValue.get(CURRENT_USER);  // 拿到当前 scope 的 User
+    System.out.println("Processing for: " + u);
+}
+```
+
+#### ② try-with-resources 写法
+
+```java
+public void handleRequest(User user, Runnable work) {
+    try (var binding = CURRENT_USER.bind(user)) {
+        work.run();
+    }  // 自动 close（解绑）
+}
+```
+
+**两种写法对比**：
+
+| 写法 | 形式 | 灵活度 |
+|---|---|---|
+| `where(...).run(work)` | 闭包式（lambda）| 紧凑 |
+| `try (var binding = bind(...))` | 块体式（try/catch）| 灵活（可加异常处理）|
+
+#### ③ 嵌套绑定（栈式）
+
+```java
+private static final ScopedValue<String> USER = ScopedValue.newInstance();
+private static final ScopedValue<String> REQUEST_ID = ScopedValue.newInstance();
+
+ScopedValue.where(USER, "mike")
+    .where(REQUEST_ID, "req-123")  // 嵌套：第二个 where 嵌套第一个
+    .run(() -> {
+        System.out.println(ScopedValue.get(USER));        // "mike"
+        System.out.println(ScopedValue.get(REQUEST_ID));   // "req-123"
+
+        // 内层 where 临时覆盖
+        ScopedValue.where(USER, "alice")
+            .run(() -> {
+                System.out.println(ScopedValue.get(USER));        // "alice"（内层覆盖）
+                System.out.println(ScopedValue.get(REQUEST_ID));   // "req-123"（未覆盖）
+            });
+
+        // 退出内层后恢复
+        System.out.println(ScopedValue.get(USER));  // "mike"
+    });
+```
+
+**关键**：栈式语义——内层 where 临时覆盖外层，退出后恢复。
+
+#### ④ 与 ThreadLocal 完整对比
+
+| 维度 | ThreadLocal | ScopedValue |
+|---|---|---|
+| 可变性 | ❌（但 TL 本身可变）| ✅ 不可变 |
+| 内存泄漏 | ⚠️（线程池复用忘 remove）| ✅ 自动解绑 |
+| 百万虚拟线程 | ⚠️ 每 VT 一个 TL entry → OOM | ✅ 单一实例 |
+| 子线程继承 | 隐式（`InheritableThreadLocal`）| 显式（`where().run()`）|
+| 嵌套 | 需手动栈管理 | 天然嵌套（栈式绑定）|
+| 类型安全 | `Object`（要转型）| 泛型 `ScopedValue<T>` |
+| API 风格 | `set()` / `get()` / `remove()` | `where().run()` / `get()` |
+| 是否能中途修改值 | ✅（`tl.set(new)`）| ❌（不可变）|
+
+#### ⑤ 不自动继承子线程（vs InheritableThreadLocal）
+
+```java
+// ThreadLocal - 子线程继承父线程的值（隐式）
+InheritableThreadLocal<String> tl = new InheritableThreadLocal<>();
+tl.set("parent-value");
+new Thread(() -> {
+    System.out.println(tl.get());  // "parent-value"（隐式继承）
+}).start();
+
+// ScopedValue - 子任务不继承
+ScopedValue<String> sv = ScopedValue.newInstance();
+ScopedValue.where(sv, "parent-value")
+    .run(() -> {
+        // 新建虚拟线程
+        Thread.startVirtualThread(() -> {
+            System.out.println(ScopedValue.get(sv));  // ❌ NoSuchElementException
+        });
+
+        // 子线程要拿到，必须显式 where() 重新绑定
+        Thread.startVirtualThread(() -> {
+            ScopedValue.where(sv, ScopedValue.get(sv))  // 手动传
+                .run(() -> {
+                    System.out.println(ScopedValue.get(sv));  // ✅
+                });
+        });
+    });
+```
+
+**关键差异**：ScopedValue **不自动继承**——子任务必须显式 `where()`。
+
+#### ⑥ 在结构化并发中使用
+
+```java
+private static final ScopedValue<User> CURRENT = ScopedValue.newInstance();
+
+public UserPosts loadDashboard(int userId) {
+    User user = fetchUser(userId);
+
+    return ScopedValue.where(CURRENT, user)
+        .call(() -> {
+            try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+                var postsF = scope.fork(() -> {
+                    User u = CURRENT.get();        // 子任务里能拿到
+                    return fetchPosts(u.id());
+                });
+
+                var statsF = scope.fork(() -> {
+                    User u = CURRENT.get();        // 同样能拿到
+                    return fetchStats(u.id());
+                });
+
+                scope.join();
+                scope.throwIfFailed();
+                return new UserPosts(postsF.get(), statsF.get());
+            }
+        });
+}
+```
+
+**关键**：ScopedValue 在 structured concurrency 里直接被子任务可见（因为 fork 的任务继承父 scope 的绑定）。
+
+#### ⑦ 实战反模式
+
+❌ **当 ThreadLocal 用 set/remove** —— ScopedValue 没有 set()，只能 bind
+❌ **子线程直接 `get()` 不 where()** —— 抛 `NoSuchElementException`
+❌ **绑大对象** —— 不可变快照，存太多数据 → 内存压力
+❌ **混用 ThreadLocal 和 ScopedValue** —— 同一份上下文存两份
+❌ **多层嵌套 where 不退出** —— 嵌套越深栈越深
+❌ **当 cache 用** —— ScopedValue 是上下文传递，不是缓存
+
+---
+
+**核心洞察**：ScopedValue 是 Java 25 给"虚拟线程时代的上下文传递"立的**新标准**。它把 ThreadLocal 的"可变 + 隐式继承 + 内存泄漏"三大问题全部解决，代价是**必须显式 `where()` + 子任务不自动继承**。所有 ThreadLocal 在虚拟线程环境都应该评估改写——**特别是 request ID / user context / trace ID 这类"只读上下文"**。
 
 ## 12. 实战：现代并发全栈
 
