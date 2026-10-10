@@ -6,7 +6,7 @@ sources:
   - "OpenJDK JDK 25 Feature List"
   - "JEP Index (https://openjdk.org/jeps/0)"
   - "Java 25 — InfoQ (Sep 2025)"
-summary: "Java 8 → 25 全量分析 - 语言特性演进、并发模型革新、模块化、模式匹配、虚拟线程"
+summary: "Java 8 → 25 全量分析 - 语言特性演进、并发模型革新、模块化、模式匹配、虚拟线程、Project Reactor 响应式"
 provenance:
   extracted: 0.85
   inferred: 0.12
@@ -25,7 +25,7 @@ updated: 2026-10-03
 ## 主入口
 - **[[summary|综合报告]]** — 执行摘要 + 6 章导航 + 4 大趋势线 + 生态位
 
-## 6 章深度分析
+## 7 章深度分析
 
 | # | 章节 | 覆盖版本 | 主要 JEP |
 |---|---|---|---|
@@ -35,6 +35,7 @@ updated: 2026-10-03
 | 4 | [[draft-04-java-21-lts-virtual-threads]] | Java 21 (LTS) | virtual threads / sequenced collections / record patterns / unnamed |
 | 5 | [[draft-05-java-22-25-modern-concurrency]] | Java 22-25 | structured concurrency / scoped values / FFM / module imports / compact source files |
 | 6 | [[draft-06-version-timeline-cheatsheet]] | Java 8-25 | 版本时间线 + 速查表 + 升级路径 |
+| 7 | [[draft-07-reactor]] | 跨版本 | Project Reactor — Mono / Flux / 操作符 / 调度 / 背压 / WebFlux / R2DBC |
 
 ## 按主题跳转
 
