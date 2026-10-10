@@ -27,8 +27,8 @@ provenance:
   extracted: 0.85
   inferred: 0.12
   ambiguous: 0.03
-base_confidence: 0.88
-lifecycle: draft
+base_confidence: 0.93
+lifecycle: stable
 lifecycle_changed: 2026-10-10
 created: 2026-10-03
 updated: 2026-10-10
@@ -98,6 +98,125 @@ try (Arena arena = Arena.ofConfined()) {
 | 安全 | 容易 JVM crash | 受 Arena 管理 |
 | 调用开销 | 高 | 接近 C |
 | 适用 | 老的 native 代码 | 新项目首选 |
+
+### 2.2 FFM API 实战拆解
+
+#### ① Arena 生命周期（3 种）
+
+```java
+// Confined - 单线程，最快，自动 close
+try (Arena arena = Arena.ofConfined()) {
+    MemorySegment seg = arena.allocate(100);
+    // 仅当前线程访问
+}
+
+// Shared - 多线程共享访问
+try (Arena arena = Arena.ofShared()) {
+    MemorySegment seg = arena.allocate(100);
+    // 多线程可同时访问（需要同步）
+}
+
+// Auto - GC 回收（不推荐生产用）
+Arena auto = Arena.ofAuto();
+MemorySegment seg = auto.allocate(100);
+// GC 时自动释放（时机不可控）
+```
+
+**关键**：**try-with-resources 是推荐写法**，Arena.close() 会立即释放底层 native 内存（不依赖 GC）。
+
+#### ② 内存分配与读写
+
+```java
+try (Arena arena = Arena.ofConfined()) {
+    // 分配 100 字节
+    MemorySegment seg = arena.allocate(100);
+    
+    // 写（offset 0 处写 int 42）
+    seg.set(ValueLayout.JAVA_INT, 0, 42);
+    seg.set(ValueLayout.JAVA_INT, 4, 100);  // offset 4 处
+    
+    // 读
+    int v1 = seg.get(ValueLayout.JAVA_INT, 0);   // 42
+    int v2 = seg.get(ValueLayout.JAVA_INT, 4);   // 100
+    
+    // 字符串（自动 UTF-8 编码）
+    MemorySegment str = arena.allocateUtf8String("Hello, FFM!");
+    String s = str.getUtf8String(0);  // "Hello, FFM!"
+    
+    // 数组
+    MemorySegment intArr = arena.allocateFrom(ValueLayout.JAVA_INT, 1, 2, 3, 4, 5);
+}
+```
+
+#### ③ FunctionDescriptor + 调用 C 函数
+
+```java
+Linker linker = Linker.nativeLinker();
+
+// 方法 1：lookup by name
+MethodHandle strlen = linker.downcallHandle(
+    linker.defaultLookup().find("strlen").orElseThrow(),
+    FunctionDescriptor.of(JAVA_LONG, JAVA_LONG)  // (返回 long, 参数 long)
+);
+
+try (Arena arena = Arena.ofConfined()) {
+    MemorySegment str = arena.allocateUtf8String("Hello");
+    long len = (long) strlen.invoke(str.address());
+    System.out.println(len);  // 5
+}
+
+// 方法 2：直接指定 C 库
+MethodHandle getpid = linker.downcallHandle(
+    Linker.nativeLinker().defaultLookup().find("getpid").orElseThrow(),
+    FunctionDescriptor.of(JAVA_INT)
+);
+int pid = (int) getpid.invoke();
+```
+
+#### ④ UpcallStub（C 调用 Java）
+
+```java
+// 定义 Java 回调
+FunctionDescriptor callbackDesc = FunctionDescriptor.ofVoid(JAVA_INT);
+
+try (Arena arena = Arena.ofConfined()) {
+    MethodHandle callback = linker.upcallStub(
+        (Consumer<Integer>) value -> System.out.println("C called back: " + value),
+        callbackDesc,
+        arena
+    );
+    
+    // 把 callback.address() 传给 C 函数，让 C 内部回调
+    cFunction.invoke(callback.address());
+}
+```
+
+#### ⑤ vs JNI 完整对比
+
+| 维度 | JNI（Java 1.1+） | FFM API（Java 22+）|
+|---|---|---|
+| 写 C 代码 | 必须 | **不用** |
+| 编译步骤 | javah + C 编译 + native loader | **没有** |
+| 内存管理 | 手动（容易泄漏）| Arena 自动 |
+| 性能 | 接近 C | 接近 C |
+| 安全 | 容易 JVM crash | 受 Arena 管理 |
+| 学习曲线 | 陡（C 知识必需）| 平（Java API）|
+| 调用开销 | 较高 | 接近 C |
+| 回调（C → Java）| 复杂（C 实现 Java 方法）| UpcallStub（一行）|
+| 适用 | 老的 native 代码 | **新项目首选** |
+
+#### ⑥ 6 条反模式
+
+❌ **不用 try-with-resources 包 Arena** —— 内存永不释放
+❌ **跨 Arena 传递 address** —— use-after-free
+❌ **共享 Arena 不 close** —— 整个进程累积 native 内存
+❌ **用 `Arena.ofAuto()` 当 fallback** —— GC 时机不可控
+❌ **不检查 C 函数返回值** —— NPE / 段错误
+❌ **在 lambda 内捕获 native 引用** —— native 生命周期比 lambda 短
+
+---
+
+**核心洞察**：FFM API 是 Java 22 给"调 C 库 + 操作 native 内存"的**现代化方案**。它把 JNI 的"写 C 代码 + 手动管理内存 + 学习曲线陡"三大痛点全部解决。**适用场景**：调系统库（OpenSSL / zstd）、高性能计算（SIMD）、跨语言互操作。**不适合**：纯 Java 应用、与 native 无关的逻辑。
 
 ## 3. Statements before super（JEP 447, Java 22 preview）
 
@@ -359,6 +478,156 @@ new StructuredTaskScope<>() {
     }
 }
 ```
+
+### 9.1 Structured Concurrency 实战拆解
+
+#### ① 3 种 shutdown 策略
+
+```java
+// 策略 1：ShutdownOnFailure - 任一失败 → 全部取消
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var a = scope.fork(() -> fetchA());
+    var b = scope.fork(() -> fetchB());
+    scope.join();
+    scope.throwIfFailed();        // 任一失败抛 ExecutionException + 取消其他
+    return combine(a.get(), b.get());
+}
+
+// 策略 2：ShutdownOnSuccess - 任一成功 → 全部取消（拿最快）
+try (var scope = new StructuredTaskScope.ShutdownOnSuccess<String>()) {
+    scope.fork(() -> fetchFromCDN("us"));
+    scope.fork(() -> fetchFromCDN("eu"));
+    scope.fork(() -> fetchFromCDN("asia"));
+    scope.join();
+    return scope.result();  // 第一个成功的
+}
+
+// 策略 3：自定义（继承 StructuredTaskScope）
+class MyScope<T> extends StructuredTaskScope<T> {
+    @Override
+    protected void handleComplete(...) {
+        // 自定义 shutdown 逻辑
+    }
+}
+```
+
+#### ② fork + join 标准模式
+
+```java
+T result = ScopedValue.call(...)
+    .call(() -> {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            var a = scope.fork(task1);
+            var b = scope.fork(task2);
+            
+            scope.join();           // 阻塞等待所有
+            scope.throwIfFailed();   // 任一失败抛异常 + 取消其他
+            
+            return combine(a.get(), b.get());
+        }
+    });
+```
+
+#### ③ 异常传播机制
+
+```java
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var a = scope.fork(() -> {
+        throw new RuntimeException("a 失败");
+    });
+    var b = scope.fork(() -> {
+        Thread.sleep(5000);   // 也会被取消
+        return "b";
+    });
+    
+    scope.join();             // a 抛异常 → 立即触发 shutdown
+    scope.throwIfFailed();    // 抛 ExecutionException，cause = RuntimeException
+    // b 已被 interrupt 取消
+}
+```
+
+**传播规则**：
+- 任一子任务抛异常 → `shutdown()` 被调用 → 其他子任务 interrupt
+- `throwIfFailed()` 抛 `ExecutionException`（cause 是首个失败的子任务异常）
+- 所有未完成的子任务被取消，资源释放
+
+#### ④ 子任务生命周期
+
+```java
+// 父 scope 退出 → 自动取消所有子任务
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var task = scope.fork(() -> {
+        while (true) {
+            doWork();
+            Thread.sleep(1000);
+        }
+    });
+    scope.join();              // 阻塞
+}  // 退出 try 时 task 自动被取消（structured binding）
+
+// 子任务不能"逃逸"
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var task = scope.fork(() -> longRunningWork());
+    scope.join();
+    // ❌ 不能在这里把 task.get() 抛到 scope 外
+    // Future<Object> outsideRef = task;  // ❌ 子任务不能超过 scope 生命周期
+}
+```
+
+#### ⑤ vs CompletableFuture
+
+| 维度 | CompletableFuture | Structured Concurrency |
+|---|---|---|
+| 生命周期 | 不绑定父 | 绑定父 scope |
+| 失败处理 | `exceptionally()` / `handle()` | `throwIfFailed()` |
+| 取消传播 | 需要 `.whenComplete()` 手动 | 自动 |
+| 嵌套 | CF 可以返回 CF | 子任务不能 spawn 独立 task |
+| 错误传播链 | `CompletionException` | `ExecutionException` |
+| 适合 | 长生命周期 pipeline | **短期并行任务** |
+| 监控 | 复杂 | 自动 structured |
+
+#### ⑥ 实战：并行 HTTP fetch
+
+```java
+record Dashboard(User user, List<Post> posts, Stats stats) {}
+
+Dashboard loadDashboard(int userId) throws Exception {
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        var userF  = scope.fork(() -> http.get("/users/" + userId, User.class));
+        var postsF = scope.fork(() -> http.get("/users/" + userId + "/posts", List.class));
+        var statsF = scope.fork(() -> http.get("/users/" + userId + "/stats", Stats.class));
+
+        scope.join();
+        scope.throwIfFailed();  // 任一 HTTP 失败 → 全部取消
+
+        return new Dashboard(userF.get(), postsF.get(), statsF.get());
+    }
+}
+
+// Scoped Values 集成
+private static final ScopedValue<User> CURRENT = ScopedValue.newInstance();
+
+Dashboard loadDashboard(int userId) {
+    User user = fetchUser(userId);
+    return ScopedValue.where(CURRENT, user).call(() -> {
+        // CURRENT 在子任务里可见（与 fork 自动绑定）
+        return loadDashboardInternal();
+    });
+}
+```
+
+#### ⑦ 6 条反模式
+
+❌ **在 fork 里做无限循环** —— 阻塞 join()，永不返回
+❌ **fork 返回 CompletableFuture 的 lambda** —— 失去 structured 语义
+❌ **fork 出去的子任务访问父 scope 外资源** —— 生命周期错乱
+❌ **不用 try-with-resources** —— 子任务永不取消
+❌ **多个 scope 嵌套 + 异常** —— 异常传播复杂
+❌ **在 fork 里做慢同步 I/O** —— 阻塞其他子任务调度（应配合虚拟线程）
+
+---
+
+**核心洞察**：Structured Concurrency 是 Java 25 给"短期并行任务"立的**结构化并发**标准——把 fork-join 模式从"手动 Future 链"压缩成"一个 try-with-resources + fork/join"。核心收益是**生命周期绑定**：父任务结束 → 子任务自动取消，**没有泄漏的孤儿线程**。**所有"并行 N 个调用 + 合并结果"的场景都应该用这个替代 CompletableFuture.allOf**。
 
 ## 10. Stable Values（JEP 502, Java 25 preview 1）
 
