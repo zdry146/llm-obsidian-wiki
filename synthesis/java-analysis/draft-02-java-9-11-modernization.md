@@ -12,7 +12,7 @@ provenance:
   extracted: 0.88
   inferred: 0.10
   ambiguous: 0.02
-base_confidence: 0.89
+base_confidence: 0.91
 lifecycle: draft
 lifecycle_changed: 2026-10-10
 created: 2026-10-03
@@ -395,6 +395,131 @@ var map = new ConcurrentHashMap<String, List<Order>>();
 var result = service.process();    // 读者不知道返回类型
 var callback = handler.get();      // ???
 ```
+
+### 5.1 `var` 实战拆解
+
+#### ① 类型推断的 3 种来源
+
+```java
+// (a) 直接初始化器 — 最常见
+var name = "Mike";                       // String
+var age = 30;                             // int
+var list = List.of("a", "b");             // List<String>
+var map = new HashMap<String, Integer>(); // HashMap<String, Integer>
+
+// (b) Diamond operator + var（注意：保留具体类型，不是 List<>）
+var list = new ArrayList<String>();       // ArrayList<String>，不是 List<String>
+var map = new HashMap<String, Integer>(); // HashMap<String, Integer>
+
+// (c) 方法返回值
+var result = service.process();           // 推断为 process() 返回类型
+var stream = list.stream();               // Stream<String>
+```
+
+#### ② 6 大限制（逐项示例）
+
+```java
+class Demo {
+    // ❌ 1. 字段不能用
+    private var name = "Mike";            // 编译错误
+    
+    // ❌ 2. 方法参数不能用
+    void greet(var name) { }              // 编译错误
+    
+    // ❌ 3. 返回类型不能用
+    public var getName() { ... }          // 编译错误
+    
+    // ❌ 4. 没有初始化器
+    var x;                                  // 编译错误
+    
+    // ❌ 5. 不能初始化为 null（推断不出类型）
+    var x = null;                           // 编译错误
+    
+    // ❌ 6. catch 异常不能用（Java 22+ 改用 unnamed _）
+    try { ... } catch (var e) { ... }     // 编译错误（Java 22 前）；Java 22+ 用 catch (var _) 或 catch (_)
+}
+
+void demo() {
+    // ✅ 1. 局部变量
+    var x = 10;
+    
+    // ✅ 2. for-each
+    for (var item : List.of(1, 2, 3)) { ... }
+    
+    // ✅ 3. try-with-resources
+    try (var in = new FileInputStream("a")) { ... }
+    
+    // ✅ 4. switch expression（Java 14+）
+    var label = switch (day) {
+        case 1 -> "Mon";
+        case 2 -> "Tue";
+        default -> "Other";
+    };
+}
+```
+
+#### ③ var + Diamond Operator（容易踩坑）
+
+```java
+// 关键：var 保留的是**具体类型**，不是接口
+Map<String, Integer> map1 = new HashMap<>();   // HashMap<String, Integer>（diamond 推断）
+var map2 = new HashMap<String, Integer>();     // HashMap<String, Integer>（var 推断具体类型）
+
+// 区别：
+List<String> l1 = new ArrayList<>();            // ArrayList<String>
+var l2 = new ArrayList<String>();               // ArrayList<String>，不是 List<String>
+
+l1 = new LinkedList<>();                        // ✅ 多态赋值 OK
+l2 = new LinkedList<>();                        // ❌ 编译错误（类型不匹配）
+```
+
+#### ④ Java 11+ var 在 lambda 参数
+
+```java
+// Java 10: lambda 参数必须显式类型或全省略
+Comparator<String> c1 = (String a, String b) -> Integer.compare(a.length(), b.length());
+Comparator<String> c2 = (a, b) -> Integer.compare(a.length(), b.length());
+
+// Java 11+: 可在 lambda 参数用 var（**必须所有参数都用 var 或全不用**）
+Comparator<String> c3 = (var a, var b) -> Integer.compare(a.length(), b.length());
+
+// 主要用途：给参数加注解
+Consumer<String> greet = (@NonNull var name) -> System.out.println("Hi " + name);
+
+// ❌ 混合：部分 var 部分不 var 编译错误
+Comparator<String> bad = (var a, b) -> ...;     // 编译错误
+```
+
+#### ⑤ 6 条实战建议
+
+| 场景 | 是否用 var | 原因 |
+|---|---|---|
+| `var list = new ArrayList<User>()` | ✅ | 右侧显而易见 |
+| `var config = loadConfig()` | ⚠️ 谨慎 | 需 IDE 跳转看返回类型 |
+| `var callback = handler.get()` | ❌ | 读不出类型 |
+| `public User getUser() { var u = ... }` 内部 | ✅ | 局部变量用 var 没问题 |
+| 方法签名 `getUser(var x)` | ❌ 编译错误 | 参数不能用 |
+| 字段 `private var name` | ❌ 编译错误 | 字段不能用 |
+
+#### ⑥ 跨语言对比
+
+| 语言 | 类似特性 | 差异 |
+|---|---|---|
+| **Kotlin** | `val name = "Mike"` | 不可变（var 才可变）|
+| **C#** | `var name = "Mike"` | 与 Java 完全等价 |
+| **C++** | `auto name = "Mike"` | 等价 |
+| **TypeScript** | `let name = "Mike"` | 推断 + 结构化类型 |
+| **Rust** | `let name = "Mike"` | 默认不可变，`let mut` 加 mutable |
+| **Scala** | `val name = "Mike"` | 不可变；`var` 才可变 |
+
+**核心差异**：
+- Kotlin/Scala `val` = Java `var` + final（不可变）
+- C# `var` = Java `var`（完全等价）
+- Rust `let` 默认不可变
+
+---
+
+**核心洞察**：`var` 不是为了"少打字"——是为了**消除右侧类型名的视觉噪音**。它把声明与构造解耦：左边写"这是个变量"，右边写"这怎么构造"。**禁区是公开 API（方法签名 / 字段 / 返回类型）**，公开 API 必须显式类型，因为读者不会在 IDE 里跳转。
 
 ## 6. HTTP Client（Java 11）
 
