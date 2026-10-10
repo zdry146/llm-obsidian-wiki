@@ -11,11 +11,11 @@ provenance:
   extracted: 0.92
   inferred: 0.06
   ambiguous: 0.02
-base_confidence: 0.90
-lifecycle: draft
-lifecycle_changed: 2026-10-03
+base_confidence: 0.92
+lifecycle: stable
+lifecycle_changed: 2026-10-10
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # §06 Java 8-25 版本时间线 + 速查表
