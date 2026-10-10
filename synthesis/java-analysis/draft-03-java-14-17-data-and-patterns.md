@@ -13,11 +13,11 @@ provenance:
   extracted: 0.90
   inferred: 0.08
   ambiguous: 0.02
-base_confidence: 0.91
+base_confidence: 0.93
 lifecycle: draft
-lifecycle_changed: 2026-10-04
+lifecycle_changed: 2026-10-10
 created: 2026-10-03
-updated: 2026-10-04
+updated: 2026-10-10
 ---
 
 # §03 Java 14-17 数据 + 模式匹配
@@ -95,6 +95,134 @@ record User(String name) {
 // ❌ record 继承
 record AdminUser(String name, int level) extends User(name, 0) {}  // ❌ record 不能 extends
 ```
+
+### 1.1 Records 实战拆解
+
+#### ① Compact Constructor（紧凑构造器）
+
+```java
+public record User(String name, int age) {
+    public User {
+        // 不写参数列表 + 不写 this.name = name（自动发生）
+        if (age < 0) throw new IllegalArgumentException("age < 0");
+    }
+}
+```
+
+vs Java 7 老写法（同样效果但多 4 行）：
+```java
+public User(String name, int age) {
+    this.name = name;   // 显式赋值
+    this.age = age;
+    if (age < 0) throw new IllegalArgumentException("age < 0");
+}
+```
+
+#### ② 自定义 accessor
+
+```java
+public record User(String name, int age) {
+    // 覆盖默认 accessor（修改返回值，不破坏不可变）
+    @Override
+    public String name() {
+        return name.toUpperCase();
+    }
+    
+    // 额外 accessor（计算属性，无 backing field）
+    public boolean isAdult() {
+        return age >= 18;
+    }
+}
+```
+
+#### ③ 静态字段和方法
+
+```java
+public record User(String name, int age) {
+    public static final User ANONYMOUS = new User("Anonymous", 0);
+    
+    public static User of(String name) {
+        return new User(name, 0);
+    }
+    
+    private static final Pattern NAME_PATTERN = Pattern.compile("[A-Z][a-z]+");
+}
+```
+
+#### ④ 泛型 records
+
+```java
+public record Pair<K, V>(K key, V value) {}
+
+Pair<String, Integer> p = new Pair<>("age", 30);
+String k = p.key();
+Integer v = p.value();
+
+// 多 bound 泛型 record
+public record ConstrainedPair<T extends Comparable<T>>(T left, T right) {
+    public ConstrainedPair {
+        if (left.compareTo(right) > 0) {
+            throw new IllegalArgumentException("left must be <= right");
+        }
+    }
+}
+```
+
+#### ⑤ equals/hashCode/toString 生成规则
+
+| 方法 | 生成规则 |
+|---|---|
+| `equals` | 比较**所有主构造器字段**（用 `Objects.equals`）|
+| `hashCode` | 基于所有字段的 hash（用 `Objects.hash`）|
+| `toString` | 格式 `ClassName(field1=value1, field2=value2)` |
+
+**关键限制**：只比较主构造器字段，**不看额外声明的字段**（与 Lombok `@Data` 不同）。
+
+```java
+public record User(String name, int age) {
+    private String nickname;  // ❌ 不参与 equals/hashCode/toString
+}
+```
+
+#### ⑥ 在 sealed 层级中使用
+
+records 是 sealed 的**天然搭档**——作为不可变数据载体：
+
+```java
+public sealed interface Shape permits Circle, Rectangle, Square {}
+
+public record Circle(double radius) implements Shape {}
+public record Rectangle(double width, double height) implements Shape {}
+public record Square(double side) implements Shape {}
+
+// 客户端用 switch 解构
+static double area(Shape shape) {
+    return switch (shape) {
+        case Circle(double r)             -> Math.PI * r * r;
+        case Rectangle(double w, double h) -> w * h;
+        case Square(double s)             -> s * s;
+    };
+}
+```
+
+#### ⑦ vs Lombok @Value / @Data
+
+| 维度 | record | Lombok @Value |
+|---|---|---|
+| 不可变 | ✅ | ✅ |
+| 字段 final | ✅ | ✅ |
+| toString | ✅ 自动 | ✅ 自动 |
+| equals/hashCode | ✅ 只看主构造器字段 | ✅ 所有 final 字段 |
+| wither | ❌ 用 `copy()` | ❌ |
+| 注解处理 | 不需要（语言级）| 需要 Lombok 插件 |
+| 父类 | ❌ 隐式 `extends Record` | ✅ |
+| IDE 支持 | ✅ Java 16+ 原生 | 依赖插件 |
+| 与 sealed 配合 | 天然（implements 即可）| 需要手动 |
+| Java 版本 | 16+ | 8+ |
+
+---
+
+**核心洞察**：record 是 Java 16 的"POJO 终结者"——4 行写完 `equals/hashCode/toString` + 不可变 + accessor。但 record 是 **"language-level data class"** 不是"Lombok 替代品"——它与 sealed + pattern switch 一起构成了 Java 16-21 的**类型驱动数据建模**核心。所有 DTO / VO 值对象 / AST 节点都应该用 record 重写。
 
 ## 2. sealed classes（JEP 409, Java 17 final）
 
